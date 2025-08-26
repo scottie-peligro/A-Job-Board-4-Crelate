@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+# Treat these as binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.svg text
+
+

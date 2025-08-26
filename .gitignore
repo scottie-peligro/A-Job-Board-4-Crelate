@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Node/Build
+node_modules/
+dist/
+*.log
+
+# VCS
+.git/
+.github/
+
+# Archives
+*.zip
+
+# Composer
+vendor/
+composer.lock
+
+

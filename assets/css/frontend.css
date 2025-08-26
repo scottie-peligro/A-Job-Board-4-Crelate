@@ -1,0 +1,696 @@
+/* Dynamic application fields - card style */
+.crelate-dynamic-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+    margin: 10px 0 20px;
+}
+
+.crelate-dynamic-fields .crelate-form-group {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    position: relative;
+}
+
+.crelate-dynamic-fields .crelate-form-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 6px;
+}
+
+.crelate-dynamic-fields .crelate-form-group input,
+.crelate-dynamic-fields .crelate-form-group select,
+.crelate-dynamic-fields .crelate-form-group textarea {
+    width: 100%;
+}
+/**
+ * Crelate Job Board Frontend Styles
+ */
+
+/* Reset and Base Styles */
+.crelate-job-board {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+    line-height: 1.6;
+    color: #333;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+/* Buttons */
+.crelate-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    border: none;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    gap: 6px;
+}
+
+.crelate-btn-primary {
+    background-color: #0073aa;
+    color: white;
+}
+
+.crelate-btn-primary:hover {
+    background-color: #005a87;
+    color: white;
+}
+
+.crelate-btn-secondary {
+    background-color: #f1f1f1;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+.crelate-btn-secondary:hover {
+    background-color: #e5e5e5;
+    color: #333;
+}
+
+.crelate-btn-sm {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+/* Search and Filters */
+.crelate-filters-section {
+    background: #f8f9fa;
+    padding: 20px;
+    margin-bottom: 30px;
+    border: 1px solid #e9ecef;
+}
+
+.crelate-search {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.crelate-search input {
+    flex: 1;
+    padding: 12px 16px;
+    border: 1px solid #ddd;
+    font-size: 14px;
+}
+
+.crelate-search input:focus {
+    outline: none;
+    border-color: #0073aa;
+    box-shadow: 0 0 0 3px rgba(0, 115, 170, 0.1);
+}
+
+.crelate-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.crelate-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.crelate-filter-group label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.crelate-filter-group select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    font-size: 14px;
+    background-color: white;
+}
+
+.crelate-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.crelate-checkbox-label input[type="checkbox"] {
+    margin: 0;
+}
+
+.crelate-checkbox-text {
+    font-weight: 500;
+}
+
+/* Results Summary */
+.crelate-results-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 15px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.crelate-results-count {
+    font-size: 16px;
+    font-weight: 600;
+    color: #666;
+}
+
+
+
+/* Grid Layout */
+.crelate-jobs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+/* Column options for full width - responsive */
+.crelate-jobs-grid.columns-2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.crelate-jobs-grid.columns-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.crelate-jobs-grid.columns-4 {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+/* Responsive breakpoints for all column options */
+@media (max-width: 1200px) {
+    .crelate-jobs-grid.columns-4 {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 992px) {
+    .crelate-jobs-grid.columns-3,
+    .crelate-jobs-grid.columns-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .crelate-jobs-grid.columns-2,
+    .crelate-jobs-grid.columns-3,
+    .crelate-jobs-grid.columns-4 {
+        grid-template-columns: 1fr;
+    }
+    
+    /* Improve job card footer layout on narrow screens */
+    .crelate-job-card-footer {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .crelate-job-actions {
+        align-self: flex-end;
+    }
+}
+
+.crelate-job-card {
+    background: white;
+    border: 1px solid #e9ecef;
+    padding: 20px;
+    position: relative;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.crelate-job-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.crelate-expired-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #dc3545;
+    color: white;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.crelate-job-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 15px;
+}
+
+.crelate-job-card-header {
+    margin-bottom: 15px;
+    margin-top: 10px;
+}
+
+.crelate-job-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.crelate-job-title a {
+    color: #333;
+    text-decoration: none;
+}
+
+.crelate-job-title a:hover {
+    color: #0073aa;
+}
+
+.crelate-remote-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background: #28a745;
+    color: white;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    position: relative;
+    z-index: 5;
+    width: 100%;
+    text-align: center;
+    margin-right: 10px;
+}
+
+.crelate-remote-badge i {
+    color: white !important;
+}
+
+/* Job meta section styling */
+.crelate-job-meta-list {
+    margin-bottom: 12px;
+}
+
+.crelate-job-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 2px;
+}
+
+.crelate-job-meta i {
+    width: 14px;
+    color: #999;
+}
+
+.crelate-job-date {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #666;
+}
+
+.crelate-job-date i {
+    width: 14px;
+    color: #999;
+}
+
+.crelate-job-excerpt {
+    margin: 15px 0;
+    font-size: 14px;
+    color: #666;
+    line-height: 1.5;
+}
+
+.crelate-job-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 15px 0;
+}
+
+.crelate-tag {
+    background: #f8f9fa;
+    color: #666;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.crelate-job-card-body {
+    flex: 1;
+}
+
+.crelate-job-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: auto;
+    padding-top: 15px;
+    border-top: 1px solid #f1f1f1;
+    min-height: 40px;
+}
+
+.crelate-job-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.crelate-job-quick-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.crelate-quick-action {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #ddd;
+    padding: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.crelate-quick-action:hover {
+    background: white;
+    border-color: #0073aa;
+    color: #0073aa;
+}
+
+/* List Layout */
+.crelate-jobs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.crelate-job-item {
+    background: white;
+    border: 1px solid #e9ecef;
+    padding: 20px;
+    position: relative;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.crelate-job-item:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.crelate-job-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 15px;
+}
+
+.crelate-job-title-section {
+    flex: 1;
+}
+
+.crelate-job-badges {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.crelate-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.crelate-badge-remote {
+    background: #28a745;
+    color: white;
+}
+
+.crelate-badge-expired {
+    background: #dc3545;
+    color: white;
+}
+
+.crelate-job-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+/* Load More */
+.crelate-load-more {
+    text-align: center;
+    margin-top: 30px;
+}
+
+/* Loading */
+.crelate-loading {
+    text-align: center;
+    padding: 40px;
+}
+
+.crelate-spinner {
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #0073aa;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 15px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* No Jobs */
+.crelate-no-jobs {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+}
+
+.crelate-no-jobs-icon {
+    font-size: 48px;
+    color: #ddd;
+    margin-bottom: 20px;
+}
+
+.crelate-no-jobs h3 {
+    margin: 0 0 10px 0;
+    color: #333;
+}
+
+.crelate-no-jobs p {
+    margin: 0;
+    font-size: 16px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .crelate-job-board {
+        padding: 15px;
+    }
+    
+    .crelate-filters {
+        grid-template-columns: 1fr;
+    }
+    
+    .crelate-jobs-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .crelate-job-item-header {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .crelate-job-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+    
+    .crelate-job-actions .crelate-btn {
+        flex: 1;
+    }
+    
+    .crelate-results-summary {
+        flex-direction: column;
+        gap: 15px;
+        align-items: stretch;
+    }
+}
+
+/* Icons (using Font Awesome or similar) */
+.crelate-icon-search::before { content: "🔍"; }
+.crelate-icon-grid::before { content: "⊞"; }
+.crelate-icon-list::before { content: "☰"; }
+.crelate-icon-cards::before { content: "▤"; }
+.crelate-icon-location::before { content: "📍"; }
+.crelate-icon-department::before { content: "🏢"; }
+.crelate-icon-type::before { content: "💼"; }
+.crelate-icon-experience::before { content: "⭐"; }
+.crelate-icon-salary::before { content: "💰"; }
+.crelate-icon-calendar::before { content: "📅"; }
+.crelate-icon-remote::before { content: "🏠"; }
+.crelate-icon-bookmark::before { content: "🔖"; }
+.crelate-icon-share::before { content: "📤"; }
+.crelate-icon-no-jobs::before { content: "📋"; }
+
+/* Application Form Styles */
+.crelate-application-form {
+    background: #f8f9fa;
+    padding: 25px;
+    border: 1px solid #e9ecef;
+    margin-top: 20px;
+}
+
+.crelate-application-form h3 {
+    margin: 0 0 20px 0;
+    color: #333;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.crelate-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.crelate-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.crelate-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.crelate-form-group label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+}
+
+.crelate-form-group input,
+.crelate-form-group select,
+.crelate-form-group textarea {
+    padding: 12px 16px;
+    border: 1px solid #ddd;
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.crelate-form-group input:focus,
+.crelate-form-group select:focus,
+.crelate-form-group textarea:focus {
+    outline: none;
+    border-color: #0073aa;
+    box-shadow: 0 0 0 3px rgba(0, 115, 170, 0.1);
+}
+
+.crelate-form-group small {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+}
+
+.crelate-form-group textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.crelate-checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.crelate-checkbox-label input[type="checkbox"] {
+    margin: 0;
+    margin-top: 2px;
+}
+
+.crelate-checkbox-text {
+    font-size: 14px;
+    line-height: 1.4;
+    color: #333;
+}
+
+.crelate-form-actions {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 10px;
+}
+
+.crelate-form-message {
+    padding: 15px;
+    font-size: 14px;
+    margin-top: 15px;
+}
+
+.crelate-form-message.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.crelate-form-message.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+@media (max-width: 768px) {
+    .crelate-form-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .crelate-application-form {
+        padding: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Further improve job card footer layout on very narrow screens */
+    .crelate-job-card-footer {
+        gap: 8px;
+    }
+    
+    .crelate-job-date {
+        font-size: 10px;
+    }
+    
+    .crelate-btn-sm {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+}
