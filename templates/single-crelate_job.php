@@ -94,7 +94,7 @@ get_header(); ?>
                 </button>
                 <div class="crelate-job-detail-apply">
                     <h3><?php _e('Apply for this Position', 'crelate-job-board'); ?></h3>
-                    <?php echo do_shortcode('[crelate_job_apply job_id="' . get_the_ID() . '"]'); ?>
+                    <?php echo do_shortcode('[crelate_job_apply_iframe job_id="' . get_the_ID() . '"]'); ?>
                 </div>
 
                 <div class="crelate-job-detail-info">
