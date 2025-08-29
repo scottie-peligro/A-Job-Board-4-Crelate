@@ -333,6 +333,408 @@ class Crelate_Shortcodes {
         <?php
         return ob_get_clean();
     }
+
+    /**
+     * Iframe-based job application form that embeds Crelate's native form
+     */
+    public function job_application_iframe($atts) {
+        $atts = shortcode_atts(array(
+            'job_id' => get_the_ID(),
+            'height' => '800px',
+            'width' => '100%',
+            'title' => __('Apply for this Position', 'crelate-job-board'),
+            'show_title' => 'true'
+        ), $atts);
+        
+        // Get Crelate job ID using multiple methods (prioritize apply URL)
+        $crelate_job_id = '';
+        
+        // Method 1: Try to extract from the apply URL (highest priority - this has the correct UUID)
+        $apply_url = get_post_meta($atts['job_id'], '_job_apply_url', true);
+        if (!empty($apply_url)) {
+            // Extract job ID from URL like: https://jobs.crelate.com/portal/TalentSphere/job/apply/e4df0697-7e57-4644-93c7-e4dd08049c83
+            if (preg_match('/\/job\/apply\/([^\/\?]+)/', $apply_url, $matches)) {
+                $crelate_job_id = $matches[1];
+            }
+        }
+        
+        // Method 2: Try the new system
+        if (empty($crelate_job_id)) {
+            global $crelate_job_board;
+            if (isset($crelate_job_board->job_id)) {
+                $crelate_job_id = $crelate_job_board->job_id->get_crelate_id($atts['job_id']);
+            }
+        }
+        
+        // Method 3: Try the old meta key
+        if (empty($crelate_job_id)) {
+            $crelate_job_id = get_post_meta($atts['job_id'], '_job_crelate_id', true);
+        }
+        
+        // Method 4: Try the other meta key
+        if (empty($crelate_job_id)) {
+            $crelate_job_id = get_post_meta($atts['job_id'], '_crelate_job_id', true);
+        }
+        
+        if (empty($crelate_job_id)) {
+            return '<div class="crelate-error">' . __('Error: Crelate job ID not found. Please check that the job has been imported from Crelate.', 'crelate-job-board') . '</div>';
+        }
+        
+        // Get settings for portal configuration
+        $settings = get_option('crelate_job_board_settings');
+        $styling_settings = get_option('crelate_job_board_styling', array());
+        $portal_url = !empty($settings['portal_url']) ? $settings['portal_url'] : 'https://jobs.crelate.com/portal';
+        $portal_name = !empty($settings['portal_name']) ? $settings['portal_name'] : 'TalentSphere';
+        
+        // Get styling values
+        $primary_color = !empty($styling_settings['primary_color']) ? $styling_settings['primary_color'] : '#0073aa';
+        $modal_background_color = !empty($styling_settings['modal_background_color']) ? $styling_settings['modal_background_color'] : '#EBF7FC';
+        $border_radius = !empty($styling_settings['border_radius']) ? $styling_settings['border_radius'] : 'rounded';
+        $button_text_color = !empty($styling_settings['button_text_color']) ? $styling_settings['button_text_color'] : 'white';
+        
+        // Calculate border radius value
+        $border_radius_value = ($border_radius === 'square') ? '0px' : '6px';
+        
+        // Construct the Crelate application URL with parameters to hide branding
+        $crelate_apply_url = $portal_url . '/' . $portal_name . '/job/apply/' . $crelate_job_id;
+        
+        // Add parameters to potentially hide branding (if Crelate supports them)
+        $crelate_apply_url .= '?embedded=true&hide_branding=true&minimal=true';
+        
+        // Debug information (remove this in production)
+        if (current_user_can('manage_options')) {
+            error_log('Crelate Iframe Debug - Job ID: ' . $crelate_job_id . ', Portal: ' . $portal_name . ', URL: ' . $crelate_apply_url);
+        }
+        
+        ob_start();
+        ?>
+        <div class="crelate-iframe-application-container">
+            <!-- Apply Button -->
+            <?php
+            $styling_settings = get_option('crelate_job_board_styling', array());
+            $apply_now_text = $styling_settings['apply_now_button_text'] ?? 'Apply Now';
+            ?>
+            <button type="button" class="crelate-btn crelate-btn-primary crelate-btn-sm" onclick="openCrelateApplicationModal('<?php echo esc_js($crelate_apply_url); ?>', '<?php echo esc_js($atts['title']); ?>')">
+                <?php echo esc_html($apply_now_text); ?>
+            </button>
+            
+            <!-- Modal Overlay -->
+            <div id="crelate-application-modal" class="crelate-modal-overlay" style="display: none;">
+                <div class="crelate-modal-content">
+                    <div class="crelate-modal-header">
+                        <button type="button" class="crelate-modal-close" onclick="closeCrelateApplicationModal()">&times;</button>
+                    </div>
+                    <div class="crelate-modal-body">
+                        <iframe 
+                            id="crelate-application-iframe"
+                            src=""
+                            width="100%"
+                            height="600px"
+                            frameborder="0"
+                            scrolling="yes"
+                            title="<?php echo esc_attr($atts['title']); ?>"
+                            class="crelate-application-iframe"
+                            allow="fullscreen"
+                            loading="lazy">
+                            <p><?php _e('Your browser does not support iframes. Please visit the application page directly:', 'crelate-job-board'); ?> 
+                                <a href="<?php echo esc_url($crelate_apply_url); ?>" target="_blank"><?php _e('Apply Here', 'crelate-job-board'); ?></a>
+                            </p>
+                        </iframe>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Fallback Link -->
+            <div class="crelate-iframe-fallback" style="display: none;">
+                <p><?php _e('Having trouble with the application form?', 'crelate-job-board'); ?></p>
+                <a href="<?php echo esc_url($crelate_apply_url); ?>" target="_blank" class="crelate-btn crelate-btn-primary crelate-btn-sm">
+                    <?php echo esc_html($apply_now_text); ?>
+                </a>
+            </div>
+        </div>
+        
+        <style>
+        .crelate-iframe-application-container {
+            margin: 20px 0;
+        }
+        
+        /* Apply button sections */
+        .crelate-job-detail-apply-top {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .crelate-job-detail-apply-bottom {
+            margin-top: 30px;
+            text-align: center;
+        }
+        
+        /* Modal Overlay */
+        .crelate-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .crelate-modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        /* Modal Content */
+        .crelate-modal-content {
+            background: <?php echo esc_attr($modal_background_color); ?>;
+            border-radius: <?php echo esc_attr($border_radius_value); ?>;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        
+        .crelate-modal-overlay.show .crelate-modal-content {
+            transform: scale(1);
+        }
+        
+        /* Modal Header */
+        .crelate-modal-header {
+            padding: 15px 20px;
+            border-bottom: none;
+            display: flex;
+            justify-content: flex-end;
+            background: <?php echo esc_attr($modal_background_color); ?>;
+        }
+        
+        .crelate-modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+        }
+        
+        .crelate-modal-close:hover {
+            background: #e9ecef;
+            color: #333;
+        }
+        
+        /* Modal Body */
+        .crelate-modal-body {
+            padding: 0;
+            overflow: hidden;
+        }
+        
+        .crelate-application-iframe {
+            display: block;
+            width: 100%;
+            height: 600px;
+            border: none;
+            outline: none;
+            overflow-y: auto;
+            /* Hide top 150px and bottom 50px of iframe content */
+            clip-path: inset(150px 0 50px 0);
+            -webkit-clip-path: inset(150px 0 50px 0);
+            /* Pull iframe content up by 150px to show form at the top */
+            margin-top: -150px;
+        }
+        
+        /* Additional styling for better modal experience */
+        .crelate-modal-content {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .crelate-modal-body {
+            padding: 0;
+            overflow: hidden;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Fallback */
+        .crelate-iframe-fallback {
+            margin-top: 15px;
+            text-align: center;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 6px;
+        }
+        
+        .crelate-iframe-fallback p {
+            margin-bottom: 10px;
+            color: #666;
+        }
+        
+        .crelate-btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background: var(--primary-color, #0073aa);
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+        }
+        
+        .crelate-btn:hover {
+            background: var(--primary-color-dark, #005a87);
+            color: white;
+            text-decoration: none;
+        }
+        
+        .crelate-btn-primary {
+            background: var(--primary-color, #0073aa);
+        }
+        
+        .crelate-btn-primary:hover {
+            background: var(--primary-color-dark, #005a87);
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .crelate-modal-content {
+                width: 95%;
+                max-height: 95vh;
+            }
+            
+            .crelate-application-iframe {
+                height: 500px;
+            }
+            
+            .crelate-apply-btn {
+                padding: 10px 20px;
+                font-size: 14px;
+            }
+        }
+        
+        /* Prevent body scroll when modal is open */
+        body.modal-open {
+            overflow: hidden;
+        }
+        </style>
+        
+        <script>
+        // Modal functions
+        function openCrelateApplicationModal(url, title) {
+            const modal = document.getElementById('crelate-application-modal');
+            const iframe = document.getElementById('crelate-application-iframe');
+            
+            if (modal && iframe) {
+                // Set iframe source
+                iframe.src = url;
+                
+                // Show modal
+                modal.style.display = 'flex';
+                setTimeout(() => {
+                    modal.classList.add('show');
+                }, 10);
+                
+                // Prevent body scroll
+                document.body.classList.add('modal-open');
+                
+                // Focus management
+                modal.setAttribute('aria-hidden', 'false');
+                
+                // Log for debugging
+                console.log('Opening Crelate application modal:', url);
+            }
+        }
+        
+        function closeCrelateApplicationModal() {
+            const modal = document.getElementById('crelate-application-modal');
+            const iframe = document.getElementById('crelate-application-iframe');
+            
+            if (modal && iframe) {
+                // Hide modal
+                modal.classList.remove('show');
+                setTimeout(() => {
+                    modal.style.display = 'none';
+                    // Clear iframe source to stop loading
+                    iframe.src = '';
+                }, 300);
+                
+                // Restore body scroll
+                document.body.classList.remove('modal-open');
+                
+                // Focus management
+                modal.setAttribute('aria-hidden', 'true');
+                
+                console.log('Closing Crelate application modal');
+            }
+        }
+        
+        // Close modal when clicking outside
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('crelate-application-modal');
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeCrelateApplicationModal();
+                    }
+                });
+            }
+            
+            // Close modal with Escape key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    const modal = document.getElementById('crelate-application-modal');
+                    if (modal && modal.style.display !== 'none') {
+                        closeCrelateApplicationModal();
+                    }
+                }
+            });
+            
+            // Handle iframe loading states
+            const iframe = document.getElementById('crelate-application-iframe');
+            if (iframe) {
+                iframe.addEventListener('load', function() {
+                    console.log('Crelate application iframe loaded successfully');
+                });
+                
+                iframe.addEventListener('error', function() {
+                    console.error('Error loading Crelate application iframe');
+                    // Show fallback message
+                    const fallback = document.querySelector('.crelate-iframe-fallback');
+                    if (fallback) {
+                        fallback.style.display = 'block';
+                    }
+                });
+            }
+        });
+        </script>
+        <?php
+        return ob_get_clean();
+    }
 }
 
 // Initialize shortcodes
