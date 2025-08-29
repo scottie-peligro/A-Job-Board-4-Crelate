@@ -1,0 +1,415 @@
+/**
+ * Crelate Theme Button Inheritance CSS
+ * 
+ * This file provides minimal CSS for theme button inheritance.
+ * Most styling will come from the theme's button classes that are applied via JavaScript.
+ * 
+ * @package Crelate_Job_Board
+ * @since 1.0.2
+ */
+
+/* ==========================================================================
+   Theme Button Inheritance
+   ========================================================================== */
+
+/* Ensure buttons have proper base styling when theme classes are applied */
+.crelate-btn,
+.crelate-btn-primary,
+.crelate-btn-secondary,
+.crelate-template-btn,
+.crelate-quick-action,
+.crelate-share-btn,
+.crelate-sidebar-toggle {
+    /* Reset any conflicting styles */
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    
+    /* Ensure proper button semantics */
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    border: none;
+    outline: none;
+    
+    /* Smooth transitions for theme compatibility */
+    transition: all 0.2s ease;
+    
+    /* Prevent text selection on buttons */
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Focus states for accessibility */
+.crelate-btn:focus,
+.crelate-btn-primary:focus,
+.crelate-btn-secondary:focus,
+.crelate-template-btn:focus,
+.crelate-quick-action:focus,
+.crelate-share-btn:focus,
+.crelate-sidebar-toggle:focus {
+    outline: 2px solid #007cba;
+    outline-offset: 2px;
+}
+
+/* Focus-visible support for better accessibility */
+.crelate-btn.focus-visible,
+.crelate-btn-primary.focus-visible,
+.crelate-btn-secondary.focus-visible,
+.crelate-template-btn.focus-visible,
+.crelate-quick-action.focus-visible,
+.crelate-share-btn.focus-visible,
+.crelate-sidebar-toggle.focus-visible {
+    outline: 2px solid #007cba;
+    outline-offset: 2px;
+}
+
+/* Disabled states */
+.crelate-btn:disabled,
+.crelate-btn-primary:disabled,
+.crelate-btn-secondary:disabled,
+.crelate-template-btn:disabled,
+.crelate-quick-action:disabled,
+.crelate-share-btn:disabled,
+.crelate-sidebar-toggle:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* ==========================================================================
+   Theme-Specific Overrides
+   ========================================================================== */
+
+/* Block themes (theme.json) - minimal interference */
+.wp-element-button.crelate-btn,
+.wp-element-button.crelate-btn-primary,
+.wp-element-button.crelate-btn-secondary {
+    /* Let WordPress core handle styling */
+    font-family: inherit;
+}
+
+/* Avada theme compatibility */
+.fusion-button.crelate-btn,
+.fusion-button.crelate-btn-primary,
+.fusion-button.crelate-btn-secondary {
+    /* Ensure proper Avada button styling */
+    font-family: inherit;
+    text-transform: inherit;
+}
+
+/* Astra theme compatibility */
+.ast-button.crelate-btn,
+.ast-button.crelate-btn-primary,
+.ast-button.crelate-btn-secondary {
+    /* Ensure proper Astra button styling */
+    font-family: inherit;
+    font-weight: inherit;
+}
+
+/* GeneratePress theme compatibility */
+.button.crelate-btn,
+.button.crelate-btn-primary,
+.button.crelate-btn-secondary {
+    /* Ensure proper GeneratePress button styling */
+    font-family: inherit;
+    text-decoration: none;
+}
+
+/* Bootstrap theme compatibility */
+.btn.crelate-btn,
+.btn.crelate-btn-primary,
+.btn.crelate-btn-secondary {
+    /* Ensure proper Bootstrap button styling */
+    font-family: inherit;
+    text-decoration: none;
+}
+
+/* Tailwind CSS theme compatibility */
+.crelate-btn.bg-blue-600,
+.crelate-btn-primary.bg-blue-600,
+.crelate-btn-secondary.bg-gray-500 {
+    /* Ensure proper Tailwind button styling */
+    font-family: inherit;
+    text-decoration: none;
+}
+
+/* Divi theme compatibility */
+.et_pb_button.crelate-btn,
+.et_pb_button.crelate-btn-primary,
+.et_pb_button.crelate-btn-secondary {
+    /* Ensure proper Divi button styling */
+    font-family: inherit;
+    text-decoration: none;
+}
+
+/* Elementor theme compatibility */
+.elementor-button.crelate-btn,
+.elementor-button.crelate-btn-primary,
+.elementor-button.crelate-btn-secondary {
+    /* Ensure proper Elementor button styling */
+    font-family: inherit;
+    text-decoration: none;
+}
+
+/* ==========================================================================
+   Context-Specific Styling
+   ========================================================================== */
+
+/* Load more button specific styling */
+.crelate-button-load-more {
+    /* Ensure load more buttons are properly sized */
+    min-width: 120px;
+}
+
+/* Search button specific styling */
+.crelate-button-search {
+    /* Ensure search buttons have proper icon alignment */
+    gap: 0.5rem;
+}
+
+/* Template switcher specific styling */
+.crelate-button-template-switcher {
+    /* Ensure template switcher buttons are properly sized */
+    min-width: 40px;
+    min-height: 40px;
+}
+
+/* Quick action button specific styling */
+.crelate-button-quick-action {
+    /* Ensure quick action buttons are properly sized */
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0.25rem;
+}
+
+/* Share button specific styling */
+.crelate-button-share {
+    /* Ensure share buttons have proper icon alignment */
+    gap: 0.25rem;
+}
+
+/* Sidebar toggle specific styling */
+.crelate-button-sidebar-toggle {
+    /* Ensure sidebar toggle buttons are properly sized */
+    min-width: 40px;
+    min-height: 40px;
+}
+
+/* ==========================================================================
+   Responsive Design
+   ========================================================================== */
+
+/* Mobile-specific adjustments */
+@media (max-width: 768px) {
+    .crelate-btn,
+    .crelate-btn-primary,
+    .crelate-btn-secondary {
+        /* Ensure buttons are touch-friendly on mobile */
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    /* Reduce padding on mobile for better fit */
+    .crelate-button-load-more {
+        min-width: 100px;
+    }
+    
+    .crelate-button-template-switcher,
+    .crelate-button-sidebar-toggle {
+        min-width: 44px;
+        min-height: 44px;
+    }
+}
+
+/* ==========================================================================
+   Reduced Motion Support
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    .crelate-btn,
+    .crelate-btn-primary,
+    .crelate-btn-secondary,
+    .crelate-template-btn,
+    .crelate-quick-action,
+    .crelate-share-btn,
+    .crelate-sidebar-toggle {
+        /* Remove transitions for users who prefer reduced motion */
+        transition: none;
+    }
+}
+
+/* ==========================================================================
+   High Contrast Mode Support
+   ========================================================================== */
+
+@media (prefers-contrast: high) {
+    .crelate-btn,
+    .crelate-btn-primary,
+    .crelate-btn-secondary,
+    .crelate-template-btn,
+    .crelate-quick-action,
+    .crelate-share-btn,
+    .crelate-sidebar-toggle {
+        /* Ensure high contrast for accessibility */
+        border: 2px solid currentColor;
+    }
+}
+
+/* ==========================================================================
+   Print Styles
+   ========================================================================== */
+
+@media print {
+    .crelate-btn,
+    .crelate-btn-primary,
+    .crelate-btn-secondary,
+    .crelate-template-btn,
+    .crelate-quick-action,
+    .crelate-share-btn,
+    .crelate-sidebar-toggle {
+        /* Ensure buttons are visible in print */
+        background: #fff !important;
+        color: #000 !important;
+        border: 1px solid #000 !important;
+        box-shadow: none !important;
+    }
+}
+
+/* ==========================================================================
+   Debug Styles (only when debug mode is enabled)
+   ========================================================================== */
+
+.crelate-theme-enhanced {
+    /* Visual indicator for enhanced buttons in debug mode */
+    position: relative;
+}
+
+/* Debug indicator */
+.crelate-theme-enhanced::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 6px;
+    height: 6px;
+    background: #007cba;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+/* Show debug indicator only in debug mode */
+body.crelate-debug .crelate-theme-enhanced::after {
+    opacity: 1;
+}
+
+/* ==========================================================================
+   Loading States
+   ========================================================================== */
+
+.crelate-theme-loading {
+    /* Loading state for buttons */
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.crelate-theme-loading::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border: 2px solid transparent;
+    border-top: 2px solid currentColor;
+    border-radius: 50%;
+    animation: crelate-spin 1s linear infinite;
+}
+
+@keyframes crelate-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ==========================================================================
+   Utility Classes
+   ========================================================================== */
+
+/* Hide theme button enhancement for specific elements */
+[data-no-theme-button="1"] {
+    /* Reset any theme button classes */
+    background: initial !important;
+    color: initial !important;
+    border: initial !important;
+    font-family: initial !important;
+    font-size: initial !important;
+    font-weight: initial !important;
+    padding: initial !important;
+    margin: initial !important;
+    border-radius: initial !important;
+    box-shadow: initial !important;
+    text-decoration: initial !important;
+    text-transform: initial !important;
+    letter-spacing: initial !important;
+    line-height: initial !important;
+    transition: initial !important;
+}
+
+/* Force theme button enhancement for specific elements */
+.crelate-force-theme-button {
+    /* This class can be used to force theme button enhancement */
+    position: relative;
+}
+
+/* ==========================================================================
+   Legacy Support
+   ========================================================================== */
+
+/* Support for older browsers that don't support CSS Grid or Flexbox */
+@supports not (display: flex) {
+    .crelate-btn,
+    .crelate-btn-primary,
+    .crelate-btn-secondary,
+    .crelate-template-btn,
+    .crelate-quick-action,
+    .crelate-share-btn,
+    .crelate-sidebar-toggle {
+        display: inline-block;
+        vertical-align: middle;
+        text-align: center;
+    }
+}
+
+/* Support for older browsers that don't support CSS custom properties */
+@supports not (--custom-property: value) {
+    .crelate-btn,
+    .crelate-btn-primary,
+    .crelate-btn-secondary,
+    .crelate-template-btn,
+    .crelate-quick-action,
+    .crelate-share-btn,
+    .crelate-sidebar-toggle {
+        /* Fallback colors for older browsers */
+        background-color: #007cba;
+        color: #ffffff;
+        border: 1px solid #007cba;
+    }
+    
+    .crelate-btn:hover,
+    .crelate-btn-primary:hover,
+    .crelate-btn-secondary:hover,
+    .crelate-template-btn:hover,
+    .crelate-quick-action:hover,
+    .crelate-share-btn:hover,
+    .crelate-sidebar-toggle:hover {
+        background-color: #005a87;
+        border-color: #005a87;
+    }
+}

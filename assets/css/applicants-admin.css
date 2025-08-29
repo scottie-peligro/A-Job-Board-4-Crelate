@@ -1,0 +1,448 @@
+/* Applicants Admin Styles */
+
+.applicant-details {
+    margin-top: 20px;
+}
+
+.applicant-details .postbox {
+    margin-bottom: 20px;
+}
+
+.applicant-details .postbox h2.hndle {
+    padding: 10px 15px;
+    margin: 0;
+    border-bottom: 1px solid #ccd0d4;
+    background: #f9f9f9;
+}
+
+.applicant-details .postbox .inside {
+    padding: 15px;
+}
+
+.applicant-details .form-table th {
+    width: 150px;
+    padding: 10px 10px 10px 0;
+    vertical-align: top;
+    font-weight: 600;
+}
+
+.applicant-details .form-table td {
+    padding: 10px 0;
+}
+
+.cover-letter-content {
+    background: #f9f9f9;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.cover-letter-content p {
+    margin: 0 0 10px 0;
+    line-height: 1.6;
+}
+
+.cover-letter-content p:last-child {
+    margin-bottom: 0;
+}
+
+/* Status dropdown styling */
+.applicant-status {
+    padding: 5px 8px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    background: #fff;
+    font-size: 12px;
+}
+
+.applicant-status:disabled {
+    background: #f5f5f5;
+    color: #666;
+}
+
+/* Responsive table */
+@media (max-width: 768px) {
+    .wp-list-table.responsive {
+        display: block;
+    }
+    
+    .wp-list-table.responsive thead {
+        display: none;
+    }
+    
+    .wp-list-table.responsive tbody {
+        display: block;
+    }
+    
+    .wp-list-table.responsive tr {
+        display: block;
+        margin-bottom: 15px;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        padding: 10px;
+        background: #fff;
+    }
+    
+    .wp-list-table.responsive td {
+        display: block;
+        border: none;
+        padding: 5px 0;
+        text-align: left;
+    }
+    
+    .wp-list-table.responsive td:before {
+        content: attr(data-label) ": ";
+        font-weight: bold;
+        display: inline-block;
+        width: 120px;
+    }
+}
+
+/* Search and filter styling */
+.tablenav.top {
+    margin: 10px 0;
+    padding: 10px 0;
+    border-bottom: 1px solid #ddd;
+}
+
+.tablenav.top .alignleft.actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.tablenav.top input[type="text"],
+.tablenav.top select {
+    padding: 5px 8px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    font-size: 13px;
+}
+
+.tablenav.top .button {
+    padding: 5px 12px;
+    height: auto;
+    line-height: 1.4;
+}
+
+/* Pagination styling */
+.tablenav-pages {
+    float: right;
+}
+
+.tablenav-pages .page-numbers {
+    display: inline-block;
+    padding: 5px 10px;
+    margin: 0 2px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    text-decoration: none;
+    background: #fff;
+    color: #0073aa;
+}
+
+.tablenav-pages .page-numbers.current {
+    background: #0073aa;
+    color: #fff;
+    border-color: #0073aa;
+}
+
+.tablenav-pages .page-numbers:hover {
+    background: #f5f5f5;
+    color: #0073aa;
+}
+
+/* Applicant table styling */
+.wp-list-table .applicant-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.wp-list-table .applicant-info strong {
+    color: #23282d;
+}
+
+.wp-list-table .applicant-info small {
+    color: #666;
+    font-size: 11px;
+}
+
+.wp-list-table .job-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.wp-list-table .job-info a {
+    color: #0073aa;
+    text-decoration: none;
+}
+
+.wp-list-table .job-info a:hover {
+    color: #005a87;
+    text-decoration: underline;
+}
+
+.wp-list-table .job-info small {
+    color: #666;
+    font-size: 11px;
+}
+
+/* Resume download button */
+.resume-download-btn {
+    display: inline-block;
+    padding: 4px 8px;
+    background: #0073aa;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 3px;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.resume-download-btn:hover {
+    background: #005a87;
+    color: #fff;
+    text-decoration: none;
+}
+
+/* Status badges */
+.status-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.status-badge.new {
+    background: #e7f3ff;
+    color: #0073aa;
+}
+
+.status-badge.reviewed {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.status-badge.contacted {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-badge.rejected {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+/* Email template buttons */
+.email-templates {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+}
+
+.email-templates .button {
+    margin-right: 10px;
+    margin-bottom: 5px;
+}
+
+/* Copy to clipboard button */
+.copy-to-clipboard {
+    display: inline-block;
+    padding: 2px 6px;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    font-size: 11px;
+    text-decoration: none;
+    color: #666;
+    cursor: pointer;
+}
+
+.copy-to-clipboard:hover {
+    background: #e0e0e0;
+    color: #333;
+    text-decoration: none;
+}
+
+/* Loading states */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #0073aa;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Notice styling */
+.notice {
+    margin: 15px 0;
+    padding: 10px 15px;
+    border-left: 4px solid #00a32a;
+    background: #fff;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.notice.notice-error {
+    border-left-color: #d63638;
+}
+
+.notice.notice-warning {
+    border-left-color: #dba617;
+}
+
+.notice.notice-info {
+    border-left-color: #72aee6;
+}
+
+/* Tooltip styling */
+.crelate-tooltip {
+    position: absolute;
+    background: #333;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    z-index: 9999;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.crelate-tooltip:after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border: 5px solid transparent;
+    border-top-color: #333;
+}
+
+/* Crelate Job ID styling */
+.crelate-job-id {
+    display: inline-block;
+    padding: 2px 6px;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: monospace;
+}
+
+.crelate-job-id-label {
+    color: #666;
+    font-weight: 500;
+}
+
+.crelate-job-id-value {
+    color: #333;
+    font-weight: 600;
+}
+
+/* Export button styling */
+.export-applicants {
+    background: #28a745;
+    border-color: #28a745;
+    color: #fff;
+}
+
+.export-applicants:hover {
+    background: #218838;
+    border-color: #1e7e34;
+    color: #fff;
+}
+
+.export-applicants:disabled {
+    background: #6c757d;
+    border-color: #6c757d;
+    color: #fff;
+    opacity: 0.65;
+}
+
+/* Bulk actions styling */
+.bulk-actions {
+    margin: 10px 0;
+    padding: 10px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+}
+
+.bulk-actions select {
+    margin-right: 10px;
+}
+
+/* Date range picker styling */
+.date-range-picker {
+    width: 120px;
+    padding: 5px 8px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    font-size: 13px;
+}
+
+/* Keyboard shortcuts hint */
+.keyboard-shortcuts {
+    margin-top: 10px;
+    padding: 10px;
+    background: #f0f8ff;
+    border: 1px solid #b3d9ff;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #666;
+}
+
+.keyboard-shortcuts strong {
+    color: #333;
+}
+
+/* Print styles */
+@media print {
+    .tablenav,
+    .bulk-actions,
+    .email-templates,
+    .copy-to-clipboard,
+    .export-applicants {
+        display: none !important;
+    }
+    
+    .wp-list-table {
+        border: none;
+    }
+    
+    .wp-list-table th,
+    .wp-list-table td {
+        border: 1px solid #000;
+        padding: 5px;
+    }
+    
+    .applicant-details .postbox {
+        border: 1px solid #000;
+        margin-bottom: 20px;
+    }
+}
+
+

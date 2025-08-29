@@ -1,0 +1,1784 @@
+<?php
+/**
+ * Crelate Job Board Admin Class
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class Crelate_Admin {
+    
+    /**
+     * Security settings
+     */
+    private $security_key = 'crelate_api_lockdown_2024';
+    private $authorized_users = array();
+    private $settings_locked = false;
+    
+    /**
+     * Constructor
+     */
+    public function __construct() {
+        // Initialize security (temporarily disabled to fix site)
+        // $this->init_security();
+        
+        add_action('admin_menu', array($this, 'add_admin_menu'));
+        add_action('admin_init', array($this, 'init_settings'));
+        add_action('admin_notices', array($this, 'admin_notices'));
+        add_action('wp_ajax_crelate_test_connection', array($this, 'test_connection'));
+        add_action('wp_ajax_crelate_import_jobs', array($this, 'import_jobs'));
+        add_action('wp_ajax_crelate_get_import_stats', array($this, 'get_import_stats'));
+        add_action('wp_ajax_crelate_get_current_stats', array($this, 'get_current_stats'));
+        add_action('update_option_crelate_job_board_settings', array($this, 'update_cron_job'), 10, 2);
+        
+        // Add security hooks (temporarily disabled)
+        // add_action('admin_init', array($this, 'check_api_settings_access'));
+        // add_action('wp_ajax_crelate_unlock_api_settings', array($this, 'unlock_api_settings'));
+        // add_action('wp_ajax_crelate_lock_api_settings', array($this, 'lock_api_settings'));
+        // add_action('admin_menu', array($this, 'add_security_tab'));
+        
+        // Removed additional application fields feature
+    }
+    
+    /**
+     * Initialize security settings
+     */
+    private function init_security() {
+        // Check if settings are locked
+        $this->settings_locked = get_option('crelate_api_settings_locked', false);
+        
+        // Get authorized users (super admins and specific user IDs)
+        $this->authorized_users = get_option('crelate_authorized_users', array());
+        
+        // Add current super admin if not in list
+        if (is_super_admin()) {
+            $current_user_id = get_current_user_id();
+            if (!in_array($current_user_id, $this->authorized_users)) {
+                $this->authorized_users[] = $current_user_id;
+                update_option('crelate_authorized_users', $this->authorized_users);
+            }
+        }
+    }
+    
+    /**
+     * Check if current user is authorized to modify API settings
+     */
+    private function is_authorized_user() {
+        $current_user_id = get_current_user_id();
+        
+        // Super admins are always authorized
+        if (is_super_admin()) {
+            return true;
+        }
+        
+        // Check if user is in authorized list
+        if (in_array($current_user_id, $this->authorized_users)) {
+            return true;
+        }
+        
+        // Check for special capability
+        if (current_user_can('manage_network_options')) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check API settings access and log unauthorized attempts
+     */
+    public function check_api_settings_access() {
+        if (isset($_POST['option_page']) && $_POST['option_page'] === 'crelate_job_board_settings') {
+            if ($this->settings_locked && !$this->is_authorized_user()) {
+                // Log unauthorized attempt
+                $this->log_security_event('Unauthorized attempt to modify API settings', array(
+                    'user_id' => get_current_user_id(),
+                    'user_login' => wp_get_current_user()->user_login,
+                    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+                    'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
+                ));
+                
+                // Block the action
+                wp_die('Access denied. API settings are locked for security. Contact your administrator.', 'Security Alert', array('response' => 403));
+            }
+        }
+    }
+    
+    /**
+     * Log security events
+     */
+    private function log_security_event($message, $data = array()) {
+        $log_entry = array(
+            'timestamp' => current_time('mysql'),
+            'message' => $message,
+            'data' => $data
+        );
+        
+        $security_log = get_option('crelate_security_log', array());
+        $security_log[] = $log_entry;
+        
+        // Keep only last 100 entries
+        if (count($security_log) > 100) {
+            $security_log = array_slice($security_log, -100);
+        }
+        
+        update_option('crelate_security_log', $security_log);
+        
+        // Also log to WordPress error log
+        error_log('Crelate Security: ' . $message . ' - ' . json_encode($data));
+    }
+    
+    /**
+     * Unlock API settings (AJAX)
+     */
+    public function unlock_api_settings() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'], 'crelate_unlock_api')) {
+            wp_die('Security check failed');
+        }
+        
+        // Check authorization
+        if (!$this->is_authorized_user()) {
+            wp_die('Access denied');
+        }
+        
+        // Unlock settings
+        update_option('crelate_api_settings_locked', false);
+        $this->settings_locked = false;
+        
+        $this->log_security_event('API settings unlocked', array(
+            'user_id' => get_current_user_id(),
+            'user_login' => wp_get_current_user()->user_login
+        ));
+        
+        wp_send_json_success('API settings unlocked successfully');
+    }
+    
+    /**
+     * Lock API settings (AJAX)
+     */
+    public function lock_api_settings() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['nonce'], 'crelate_lock_api')) {
+            wp_die('Security check failed');
+        }
+        
+        // Check authorization
+        if (!$this->is_authorized_user()) {
+            wp_die('Access denied');
+        }
+        
+        // Lock settings
+        update_option('crelate_api_settings_locked', true);
+        $this->settings_locked = true;
+        
+        $this->log_security_event('API settings locked', array(
+            'user_id' => get_current_user_id(),
+            'user_login' => wp_get_current_user()->user_login
+        ));
+        
+        wp_send_json_success('API settings locked successfully');
+    }
+    
+    /**
+     * Add admin menu
+     */
+    public function add_admin_menu() {
+        add_menu_page(
+            __('A Job Board 4 Crelate', 'crelate-job-board'),
+            __('Job Board', 'crelate-job-board'),
+            'manage_options',
+            'crelate-job-board',
+            array($this, 'settings_page'),
+            'dashicons-businessman',
+            30
+        );
+        
+        add_submenu_page(
+            'crelate-job-board',
+            __('Settings', 'crelate-job-board'),
+            __('Settings', 'crelate-job-board'),
+            'manage_options',
+            'crelate-job-board',
+            array($this, 'settings_page')
+        );
+        
+        add_submenu_page(
+            'crelate-job-board',
+            __('Statistics', 'crelate-job-board'),
+            __('Statistics', 'crelate-job-board'),
+            'manage_options',
+            'crelate-statistics',
+            array($this, 'statistics_page')
+        );
+        
+        add_submenu_page(
+            'crelate-job-board',
+            __('Test Page', 'crelate-job-board'),
+            __('Test Page', 'crelate-job-board'),
+            'manage_options',
+            'crelate-test-page',
+            array($this, 'test_page')
+        );
+    }
+    
+    /**
+     * Initialize settings
+     */
+    public function init_settings() {
+        register_setting('crelate_job_board_settings', 'crelate_job_board_settings', array($this, 'sanitize_settings'));
+        register_setting('crelate_job_board_styling', 'crelate_job_board_styling', array($this, 'sanitize_styling_settings'));
+        
+        add_settings_section(
+            'crelate_api_settings',
+            __('API Settings', 'crelate-job-board'),
+            array($this, 'api_settings_section'),
+            'crelate_job_board_settings'
+        );
+        
+        add_settings_field(
+            'api_key',
+            __('API Key', 'crelate-job-board'),
+            array($this, 'api_key_field'),
+            'crelate_job_board_settings',
+            'crelate_api_settings'
+        );
+        
+        add_settings_field(
+            'api_endpoint',
+            __('API Endpoint', 'crelate-job-board'),
+            array($this, 'api_endpoint_field'),
+            'crelate_job_board_settings',
+            'crelate_api_settings'
+        );
+        
+        add_settings_field(
+            'portal_id',
+            __('Portal ID', 'crelate-job-board'),
+            array($this, 'portal_id_field'),
+            'crelate_job_board_settings',
+            'crelate_api_settings'
+        );
+        
+        add_settings_field(
+            'portal_url',
+            __('Portal URL', 'crelate-job-board'),
+            array($this, 'portal_url_field'),
+            'crelate_job_board_settings',
+            'crelate_api_settings'
+        );
+        
+        add_settings_field(
+            'portal_name',
+            __('Portal Name', 'crelate-job-board'),
+            array($this, 'portal_name_field'),
+            'crelate_job_board_settings',
+            'crelate_api_settings'
+        );
+        
+        // Moved Job Board Page URL to bottom of Setup Connections section
+        add_settings_field(
+            'job_board_page_url',
+            __('Job Board Page URL', 'crelate-job-board'),
+            array($this, 'job_board_page_url_field'),
+            'crelate_job_board_settings',
+            'crelate_api_settings'
+        );
+        
+        add_settings_section(
+            'crelate_import_settings',
+            __('Import Settings', 'crelate-job-board'),
+            array($this, 'import_settings_section'),
+            'crelate_job_board_settings'
+        );
+        
+        add_settings_field(
+            'auto_import',
+            __('Auto Import', 'crelate-job-board'),
+            array($this, 'auto_import_field'),
+            'crelate_job_board_settings',
+            'crelate_import_settings'
+        );
+        
+        add_settings_field(
+            'import_frequency',
+            __('Import Frequency', 'crelate-job-board'),
+            array($this, 'import_frequency_field'),
+            'crelate_job_board_settings',
+            'crelate_import_settings'
+        );
+        
+        add_settings_section(
+            'crelate_display_settings',
+            __('Display Settings', 'crelate-job-board'),
+            array($this, 'display_settings_section'),
+            'crelate_job_board_settings'
+        );
+        
+        add_settings_field(
+            'jobs_per_page',
+            __('Jobs Per Page', 'crelate-job-board'),
+            array($this, 'jobs_per_page_field'),
+            'crelate_job_board_settings',
+            'crelate_display_settings'
+        );
+        
+        add_settings_field(
+            'enable_search',
+            __('Enable Search', 'crelate-job-board'),
+            array($this, 'enable_search_field'),
+            'crelate_job_board_settings',
+            'crelate_display_settings'
+        );
+        
+        add_settings_field(
+            'enable_filters',
+            __('Enable Filters', 'crelate-job-board'),
+            array($this, 'enable_filters_field'),
+            'crelate_job_board_settings',
+            'crelate_display_settings'
+        );
+        
+        add_settings_field(
+            'enable_apply',
+            __('Enable Apply Button', 'crelate-job-board'),
+            array($this, 'enable_apply_field'),
+            'crelate_job_board_settings',
+            'crelate_display_settings'
+        );
+        
+        add_settings_field(
+            'apply_redirect_url',
+            __('Apply Redirect URL', 'crelate-job-board'),
+            array($this, 'apply_redirect_url_field'),
+            'crelate_job_board_settings',
+            'crelate_display_settings'
+        );
+
+        add_settings_field(
+            'show_job_title',
+            __('Show Job Title', 'crelate-job-board'),
+            array($this, 'show_job_title_field'),
+            'crelate_job_board_settings',
+            'crelate_display_settings'
+        );
+
+        add_settings_field(
+            'job_title_tag',
+            __('Job Title Tag', 'crelate-job-board'),
+            array($this, 'job_title_tag_field'),
+            'crelate_job_board_settings',
+            'crelate_display_settings'
+        );
+
+        // Moved Enable Onboarding Page to bottom of Display Settings
+        add_settings_field(
+            'enable_onboarding',
+            __('Enable Onboarding Page', 'crelate-job-board'),
+            array($this, 'enable_onboarding_field'),
+            'crelate_job_board_settings',
+            'crelate_display_settings'
+        );
+        
+        // Add Policy Checkbox Text to Display Settings
+        add_settings_field(
+            'policy_checkbox_text',
+            __('Policy Checkbox Text', 'crelate-job-board'),
+            array($this, 'policy_checkbox_text_field'),
+            'crelate_job_board_settings',
+            'crelate_display_settings'
+        );
+    }
+    
+    /**
+     * Sanitize settings
+     */
+    public function sanitize_settings($input) {
+        $sanitized = array();
+        
+        $sanitized['api_key'] = sanitize_text_field($input['api_key'] ?? '');
+        $sanitized['api_endpoint'] = esc_url_raw($input['api_endpoint'] ?? '');
+        $sanitized['portal_id'] = sanitize_text_field($input['portal_id'] ?? '');
+        $sanitized['portal_url'] = esc_url_raw($input['portal_url'] ?? '');
+        $sanitized['portal_name'] = sanitize_text_field($input['portal_name'] ?? '');
+        $sanitized['auto_import'] = isset($input['auto_import']) ? '1' : '0';
+        $sanitized['import_frequency'] = sanitize_text_field($input['import_frequency'] ?? 'daily');
+        $sanitized['jobs_per_page'] = intval($input['jobs_per_page'] ?? 10);
+        $sanitized['enable_search'] = isset($input['enable_search']) ? '1' : '0';
+        $sanitized['enable_filters'] = isset($input['enable_filters']) ? '1' : '0';
+        $sanitized['enable_apply'] = isset($input['enable_apply']) ? '1' : '0';
+        $sanitized['apply_redirect_url'] = esc_url_raw($input['apply_redirect_url'] ?? '');
+
+        // Job board page URL
+        $sanitized['job_board_page_url'] = esc_url_raw($input['job_board_page_url'] ?? '');
+
+        // Job title settings
+        $sanitized['show_job_title'] = isset($input['show_job_title']) ? '1' : '0';
+        $sanitized['job_title_tag'] = sanitize_text_field($input['job_title_tag'] ?? 'h2');
+
+        // Onboarding settings (moved to bottom)
+        $sanitized['enable_onboarding'] = isset($input['enable_onboarding']) ? '1' : '0';
+
+        // Policy checkbox text
+        $sanitized['policy_checkbox_text'] = wp_kses_post($input['policy_checkbox_text'] ?? 'I agree to the processing of my personal data in accordance with the privacy policy.');
+
+        return $sanitized;
+    }
+    
+    /**
+     * Update cron job when settings are saved
+     */
+    public function update_cron_job($old_value, $new_value) {
+        global $crelate_job_board;
+        if ($crelate_job_board) {
+            $crelate_job_board->setup_cron_job();
+        }
+    }
+
+
+    
+    /**
+     * Sanitize styling settings
+     */
+    public function sanitize_styling_settings($input) {
+        $sanitized = array();
+        
+        $sanitized['primary_color_type'] = sanitize_text_field($input['primary_color_type'] ?? 'theme');
+        $sanitized['primary_color'] = sanitize_hex_color($input['primary_color'] ?? '#0073aa');
+        $sanitized['border_radius'] = sanitize_text_field($input['border_radius'] ?? 'default');
+        $sanitized['icon_style'] = sanitize_text_field($input['icon_style'] ?? 'default');
+        $sanitized['button_text_color'] = sanitize_text_field($input['button_text_color'] ?? 'white');
+        $sanitized['button_text_case'] = sanitize_text_field($input['button_text_case'] ?? 'normal');
+        $sanitized['button_shape'] = sanitize_text_field($input['button_shape'] ?? 'rounded');
+        $sanitized['application_form_type'] = sanitize_text_field($input['application_form_type'] ?? 'default');
+        $sanitized['view_details_button_text'] = sanitize_text_field($input['view_details_button_text'] ?? 'View Details');
+        $sanitized['apply_now_button_text'] = sanitize_text_field($input['apply_now_button_text'] ?? 'Apply Now');
+
+        // Remove deprecated application_fields feature
+
+        $sanitized['show_job_details'] = isset($input['show_job_details']) ? '1' : '0';
+        $sanitized['show_job_tags'] = isset($input['show_job_tags']) ? '1' : '0';
+        $sanitized['show_job_date'] = isset($input['show_job_date']) ? '1' : '0';
+        $sanitized['job_title_font_size'] = sanitize_text_field($input['job_title_font_size'] ?? 'default');
+        $sanitized['job_title_line_height'] = sanitize_text_field($input['job_title_line_height'] ?? 'default');
+        $sanitized['grid_columns'] = sanitize_text_field($input['grid_columns'] ?? '3');
+        $sanitized['use_theme_style'] = isset($input['use_theme_style']) ? '1' : '0';
+        
+        return $sanitized;
+    }
+    
+    /**
+     * Settings page
+     */
+    public function settings_page() {
+        $this->admin_page_html();
+    }
+    
+    /**
+     * Import page
+     */
+    public function import_page() {
+        ?>
+        <div class="wrap">
+            <h1><?php _e('Import Jobs', 'crelate-job-board'); ?></h1>
+            
+            <div class="crelate-import-section">
+                <h3><?php _e('Manual Import', 'crelate-job-board'); ?></h3>
+                <p><?php _e('Click the button below to manually import jobs from Crelate.', 'crelate-job-board'); ?></p>
+                <button type="button" class="button button-primary" id="crelate-import-jobs">
+                    <?php _e('Import Jobs', 'crelate-job-board'); ?>
+                </button>
+                <div id="import-result"></div>
+            </div>
+            
+            <div class="crelate-import-stats">
+                <h3><?php _e('Import Statistics', 'crelate-job-board'); ?></h3>
+                <div id="import-stats">
+                    <p><?php _e('Loading statistics...', 'crelate-job-board'); ?></p>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Statistics page
+     */
+    public function statistics_page() {
+        $api = new Crelate_API();
+        $stats = $api->get_import_stats();
+        ?>
+        <div class="wrap">
+            <h1><?php _e('Job Board Statistics', 'crelate-job-board'); ?></h1>
+            
+            <div class="crelate-stats-grid">
+                <div class="crelate-stat-card">
+                    <h3><?php _e('Total Jobs', 'crelate-job-board'); ?></h3>
+                    <div class="stat-number"><?php echo esc_html($stats['total_jobs']); ?></div>
+                </div>
+                
+                <div class="crelate-stat-card">
+                    <h3><?php _e('Published Jobs', 'crelate-job-board'); ?></h3>
+                    <div class="stat-number"><?php echo esc_html($stats['published_jobs']); ?></div>
+                </div>
+                
+                <div class="crelate-stat-card">
+                    <h3><?php _e('Draft Jobs', 'crelate-job-board'); ?></h3>
+                    <div class="stat-number"><?php echo esc_html($stats['draft_jobs']); ?></div>
+                </div>
+            </div>
+            
+            <?php if (!empty($stats['last_import'])): ?>
+            <div class="crelate-last-import">
+                <h3><?php _e('Last Import', 'crelate-job-board'); ?></h3>
+                <p>
+                    <strong><?php _e('Date:', 'crelate-job-board'); ?></strong> 
+                    <?php echo esc_html($stats['last_import']['timestamp']); ?>
+                </p>
+                <p>
+                    <strong><?php _e('Imported:', 'crelate-job-board'); ?></strong> 
+                    <?php echo esc_html($stats['last_import']['imported']); ?>
+                </p>
+                <p>
+                    <strong><?php _e('Updated:', 'crelate-job-board'); ?></strong> 
+                    <?php echo esc_html($stats['last_import']['updated']); ?>
+                </p>
+                <p>
+                    <strong><?php _e('Errors:', 'crelate-job-board'); ?></strong> 
+                    <?php echo esc_html($stats['last_import']['errors']); ?>
+                </p>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
+    
+    /**
+     * API settings section
+     */
+    public function api_settings_section() {
+        echo '<p>' . __('Configure your Crelate API connection settings below.', 'crelate-job-board') . '</p>';
+    }
+    
+    /**
+     * API key field
+     */
+    public function api_key_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $api_key = !empty($settings['api_key']) ? $settings['api_key'] : '';
+        // Mask for display: show first 4, rest as *
+        $display_value = '';
+        if (!empty($api_key)) {
+            $first = substr($api_key, 0, 4);
+            $display_value = $first . str_repeat('*', max(0, strlen($api_key) - 4));
+        }
+        ?>
+        <input type="text" name="crelate_job_board_settings[api_key]" value="<?php echo esc_attr($display_value); ?>" class="regular-text" />
+        <p class="description"><?php _e('Enter your Crelate API key. The input field shows only the first 4 characters when a key is saved.', 'crelate-job-board'); ?></p>
+        <?php
+    }
+    
+    /**
+     * API endpoint field
+     */
+    public function api_endpoint_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $api_endpoint = !empty($settings['api_endpoint']) ? $settings['api_endpoint'] : 'https://app.crelate.com/api/pub/v1';
+        ?>
+        <input type="url" name="crelate_job_board_settings[api_endpoint]" value="<?php echo esc_attr($api_endpoint); ?>" class="regular-text" />
+        <p class="description"><?php _e('Enter the Crelate API endpoint URL.', 'crelate-job-board'); ?></p>
+        <?php
+    }
+
+    /**
+     * Portal ID field
+     */
+    public function portal_id_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $portal_id = !empty($settings['portal_id']) ? $settings['portal_id'] : '';
+        ?>
+        <input type="text" name="crelate_job_board_settings[portal_id]" value="<?php echo esc_attr($portal_id); ?>" class="regular-text" />
+        <p class="description"><?php _e('Enter your Crelate portal/company slug used in job URLs.', 'crelate-job-board'); ?></p>
+        <?php
+    }
+    
+    /**
+     * Portal URL field
+     */
+    public function portal_url_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $portal_url = !empty($settings['portal_url']) ? $settings['portal_url'] : 'https://jobs.crelate.com/portal';
+        ?>
+        <div class="crelate-field-with-validation">
+            <input type="url" name="crelate_job_board_settings[portal_url]" value="<?php echo esc_attr($portal_url); ?>" class="regular-text" id="portal_url_field" />
+            <div class="validation-indicator" id="portal_url_validation">
+                <?php if (!empty($portal_url)): ?>
+                    <span class="validation-success">✓ <?php _e('Portal URL configured', 'crelate-job-board'); ?></span>
+                <?php else: ?>
+                    <span class="validation-error">✗ <?php _e('Portal URL required', 'crelate-job-board'); ?></span>
+                <?php endif; ?>
+            </div>
+        </div>
+        <p class="description"><?php _e('The base URL for your Crelate job portal (e.g., https://jobs.crelate.com/portal).', 'crelate-job-board'); ?></p>
+        <?php
+    }
+    
+    /**
+     * Portal Name field
+     */
+    public function portal_name_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $portal_name = !empty($settings['portal_name']) ? $settings['portal_name'] : 'TalentSphere';
+        ?>
+        <div class="crelate-field-with-validation">
+            <input type="text" name="crelate_job_board_settings[portal_name]" value="<?php echo esc_attr($portal_name); ?>" class="regular-text" id="portal_name_field" />
+            <div class="validation-indicator" id="portal_name_validation">
+                <?php if (!empty($portal_name)): ?>
+                    <span class="validation-success">✓ <?php _e('Portal Name saved', 'crelate-job-board'); ?></span>
+                <?php else: ?>
+                    <span class="validation-error">✗ <?php _e('Portal Name required', 'crelate-job-board'); ?></span>
+                <?php endif; ?>
+            </div>
+        </div>
+        <p class="description"><?php _e('Your Crelate portal name (e.g., TalentSphere, companyname). This appears in job URLs. Case sensitive.', 'crelate-job-board'); ?></p>
+        <?php
+    }
+    
+
+    
+    /**
+     * Import settings section
+     */
+    public function import_settings_section() {
+        echo '<p>' . __('Configure automatic job import settings.', 'crelate-job-board') . '</p>';
+    }
+    
+    /**
+     * Auto import field
+     */
+    public function auto_import_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $auto_import = !empty($settings['auto_import']) ? $settings['auto_import'] : '0';
+        $next_scheduled = wp_next_scheduled('crelate_job_board_import_cron');
+        $last_import = !empty($settings['last_import']) ? $settings['last_import'] : '';
+        ?>
+        <label>
+            <input type="checkbox" name="crelate_job_board_settings[auto_import]" value="1" <?php checked($auto_import, '1'); ?> />
+            <?php _e('Enable automatic job import', 'crelate-job-board'); ?>
+        </label>
+        <?php if ($auto_import === '1' && $next_scheduled): ?>
+            <p class="description">
+                <span style="color: green;">✓</span> 
+                <?php printf(__('Auto-import is active. Next run: %s', 'crelate-job-board'), date('Y-m-d H:i:s', $next_scheduled)); ?>
+            </p>
+        <?php elseif ($auto_import === '1' && !$next_scheduled): ?>
+            <p class="description">
+                <span style="color: orange;">⚠</span> 
+                <?php _e('Auto-import is enabled but not scheduled. Save settings to activate.', 'crelate-job-board'); ?>
+            </p>
+        <?php else: ?>
+            <p class="description">
+                <span style="color: red;">✗</span> 
+                <?php _e('Auto-import is disabled.', 'crelate-job-board'); ?>
+            </p>
+        <?php endif; ?>
+        
+        <?php if (!empty($last_import)): ?>
+            <p class="description">
+                <span style="color: blue;">ℹ</span> 
+                <?php 
+                if (is_array($last_import) && isset($last_import['timestamp'])) {
+                    echo __('Last import: ', 'crelate-job-board') . esc_html($last_import['timestamp']);
+                } elseif (is_array($last_import) && isset($last_import['date'])) {
+                    printf(__('Last import: %s', 'crelate-job-board'), date('Y-m-d H:i:s', $last_import['date']));
+                } elseif (is_numeric($last_import)) {
+                    printf(__('Last import: %s', 'crelate-job-board'), date('Y-m-d H:i:s', $last_import));
+                } else {
+                    echo __('Last import: ', 'crelate-job-board') . esc_html($last_import);
+                }
+                ?>
+            </p>
+        <?php endif; ?>
+        <?php
+    }
+    
+    /**
+     * Import frequency field
+     */
+    public function import_frequency_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $frequency = !empty($settings['import_frequency']) ? $settings['import_frequency'] : 'daily';
+        $next_scheduled = wp_next_scheduled('crelate_job_board_import_cron');
+        ?>
+        <div class="crelate-import-frequency-container">
+            <select name="crelate_job_board_settings[import_frequency]">
+                <option value="hourly" <?php selected($frequency, 'hourly'); ?>><?php _e('Hourly', 'crelate-job-board'); ?></option>
+                <option value="twicedaily" <?php selected($frequency, 'twicedaily'); ?>><?php _e('Twice Daily', 'crelate-job-board'); ?></option>
+                <option value="daily" <?php selected($frequency, 'daily'); ?>><?php _e('Daily', 'crelate-job-board'); ?></option>
+                <option value="weekly" <?php selected($frequency, 'weekly'); ?>><?php _e('Weekly', 'crelate-job-board'); ?></option>
+            </select>
+            
+            <button type="button" class="button button-secondary" id="crelate-import-jobs-settings">
+                <span class="button-text"><?php _e('Import Jobs', 'crelate-job-board'); ?></span>
+                <span class="loading-spinner" style="display: none;">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="8" cy="8" r="7" stroke="#ccc" stroke-width="2" fill="none"/>
+                        <path d="M8 1a7 7 0 0 1 7 7" stroke="#0073aa" stroke-width="2" fill="none" stroke-linecap="round">
+                            <animateTransform attributeName="transform" type="rotate" from="0 8 8" to="360 8 8" dur="1s" repeatCount="indefinite"/>
+                        </path>
+                    </svg>
+                </span>
+            </button>
+            
+            <div id="import-result-settings" class="import-result" style="display: none;"></div>
+        </div>
+        
+        <?php if ($next_scheduled): ?>
+            <p class="description">
+                <?php 
+                $auto_import = !empty($settings['auto_import']) ? $settings['auto_import'] : '0';
+                if ($auto_import === '1') {
+                    printf(__('Next scheduled import: %s', 'crelate-job-board'), date('Y-m-d H:i:s', $next_scheduled));
+                } else {
+                    _e('Auto-import is disabled. Enable it above to schedule automatic imports.', 'crelate-job-board');
+                }
+                ?>
+            </p>
+        <?php endif; ?>
+        <?php
+    }
+    
+    /**
+     * Display settings section
+     */
+    public function display_settings_section() {
+        echo '<p>' . __('Configure how jobs are displayed on your website.', 'crelate-job-board') . '</p>';
+    }
+    
+    /**
+     * Jobs per page field
+     */
+    public function jobs_per_page_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $jobs_per_page = !empty($settings['jobs_per_page']) ? $settings['jobs_per_page'] : 10;
+        ?>
+        <input type="number" name="crelate_job_board_settings[jobs_per_page]" value="<?php echo esc_attr($jobs_per_page); ?>" min="1" max="100" />
+        <?php
+    }
+    
+    /**
+     * Enable search field
+     */
+    public function enable_search_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $enable_search = !empty($settings['enable_search']) ? $settings['enable_search'] : '1';
+        ?>
+        <label>
+            <input type="checkbox" name="crelate_job_board_settings[enable_search]" value="1" <?php checked($enable_search, '1'); ?> />
+            <?php _e('Enable job search functionality', 'crelate-job-board'); ?>
+        </label>
+        <?php
+    }
+    
+    /**
+     * Enable filters field
+     */
+    public function enable_filters_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $enable_filters = !empty($settings['enable_filters']) ? $settings['enable_filters'] : '1';
+        ?>
+        <label>
+            <input type="checkbox" name="crelate_job_board_settings[enable_filters]" value="1" <?php checked($enable_filters, '1'); ?> />
+            <?php _e('Enable job filtering options', 'crelate-job-board'); ?>
+        </label>
+        <?php
+    }
+    
+    /**
+     * Enable apply field
+     */
+    public function enable_apply_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $enable_apply = !empty($settings['enable_apply']) ? $settings['enable_apply'] : '1';
+        ?>
+        <label>
+            <input type="checkbox" name="crelate_job_board_settings[enable_apply]" value="1" <?php checked($enable_apply, '1'); ?> />
+            <?php _e('Enable apply button on job listings', 'crelate-job-board'); ?>
+        </label>
+        <?php
+    }
+
+
+    
+    /**
+     * Apply redirect URL field
+     */
+    public function apply_redirect_url_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $apply_redirect_url = !empty($settings['apply_redirect_url']) ? $settings['apply_redirect_url'] : '';
+        ?>
+        <input type="url" name="crelate_job_board_settings[apply_redirect_url]" value="<?php echo esc_attr($apply_redirect_url); ?>" class="regular-text" />
+        <p class="description"><?php _e('Optional: Redirect all apply buttons to this URL instead of individual job apply URLs.', 'crelate-job-board'); ?></p>
+        <?php
+    }
+
+
+
+    /**
+     * Enable onboarding field
+     */
+    public function enable_onboarding_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $enable_onboarding = isset($settings['enable_onboarding']) ? $settings['enable_onboarding'] : '1';
+        ?>
+        <label>
+            <input type="checkbox" name="crelate_job_board_settings[enable_onboarding]" value="1" <?php checked($enable_onboarding, '1'); ?> />
+            <?php _e('Show onboarding page as the default tab', 'crelate-job-board'); ?>
+        </label>
+        <p class="description"><?php _e('When enabled, new users will see the onboarding page first. When disabled, users will see the General Settings tab by default. The onboarding tab will always be available regardless of this setting.', 'crelate-job-board'); ?></p>
+        <?php
+    }
+
+    /**
+     * Policy checkbox text field with rich text editor
+     */
+    public function policy_checkbox_text_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $policy_text = !empty($settings['policy_checkbox_text']) ? $settings['policy_checkbox_text'] : 'I agree to the processing of my personal data in accordance with the privacy policy.';
+        
+        // Enqueue WordPress editor scripts
+        wp_enqueue_editor();
+        ?>
+        <div class="crelate-rich-editor-container">
+            <?php
+            wp_editor(
+                $policy_text,
+                'policy_checkbox_text',
+                array(
+                    'textarea_name' => 'crelate_job_board_settings[policy_checkbox_text]',
+                    'textarea_rows' => 6,
+                    'media_buttons' => false,
+                    'tinymce' => array(
+                        'toolbar1' => 'bold,italic,underline,bullist,numlist,hr,link,unlink',
+                        'toolbar2' => '',
+                        'toolbar3' => '',
+                        'toolbar4' => '',
+                        'menubar' => false,
+                        'statusbar' => false,
+                        'resize' => false,
+                        'height' => 150,
+                        'plugins' => 'lists link hr',
+                        'content_css' => 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 14px; line-height: 1.4; }'
+                    ),
+                    'quicktags' => array(
+                        'buttons' => 'strong,em,link,ul,ol,li,close'
+                    ),
+                    'drag_drop_upload' => false,
+                    'wpautop' => false,
+                    'teeny' => true,
+                    'dfw' => false,
+                    'remove_linebreaks' => false,
+                    'convert_newlines_to_brs' => false,
+                    'remove_redundant_brs' => false,
+                    'convert_urls' => false,
+                    'relative_urls' => false,
+                    'keep_whitespace' => true
+                )
+            );
+            ?>
+        </div>
+        <p class="description">
+            <?php _e('Customize the consent/policy text shown next to the checkbox in the application form. You can use basic formatting like <strong>bold</strong>, <em>italics</em>, <u>underline</u>, bullet points, and links.', 'crelate-job-board'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Job board page URL field
+     */
+    public function job_board_page_url_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $job_board_page_url = !empty($settings['job_board_page_url']) ? $settings['job_board_page_url'] : '';
+        
+        // Check if the page exists and contains the shortcode
+        $page_valid = false;
+        $shortcode_found = false;
+        
+        if (!empty($job_board_page_url)) {
+            $page_id = url_to_postid($job_board_page_url);
+            if ($page_id) {
+                $page = get_post($page_id);
+                if ($page && $page->post_status === 'publish') {
+                    $page_valid = true;
+                    
+                    // Check for multiple shortcode variations
+                    $content = $page->post_content;
+                    $shortcode_patterns = array(
+                        '[crelate_job_board',
+                        '[crelate_jobs',
+                        '[crelate_job_search',
+                        '[crelate_job_filters',
+                        '[crelate_job_count',
+                        '[crelate_job_list',
+                        '[crelate_job_apply_iframe'
+                    );
+                    
+                    foreach ($shortcode_patterns as $pattern) {
+                        if (strpos($content, $pattern) !== false) {
+                            $shortcode_found = true;
+                            break;
+                        }
+                    }
+                    
+                    // Also check for shortcodes in page builders or meta fields
+                    if (!$shortcode_found) {
+                        // Check meta fields for shortcodes
+                        $meta_fields = get_post_meta($page_id);
+                        foreach ($meta_fields as $meta_key => $meta_values) {
+                            if (is_array($meta_values)) {
+                                foreach ($meta_values as $meta_value) {
+                                    foreach ($shortcode_patterns as $pattern) {
+                                        if (strpos($meta_value, $pattern) !== false) {
+                                            $shortcode_found = true;
+                                            break 3;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ?>
+        <div class="crelate-field-with-validation">
+            <input type="url" name="crelate_job_board_settings[job_board_page_url]" value="<?php echo esc_attr($job_board_page_url); ?>" class="regular-text" id="job_board_page_url_field" />
+            <div class="validation-indicator" id="job_board_page_url_validation">
+                <?php if (empty($job_board_page_url)): ?>
+                    <span class="validation-error">✗ <?php _e('Job Board Page URL required', 'crelate-job-board'); ?></span>
+                <?php elseif (!$page_valid): ?>
+                    <span class="validation-error">✗ <?php _e('Page not found or not published', 'crelate-job-board'); ?></span>
+                <?php elseif (!$shortcode_found): ?>
+                    <span class="validation-error">✗ <?php _e('Shortcode not found on page', 'crelate-job-board'); ?></span>
+                <?php else: ?>
+                    <span class="validation-success">✓ <?php _e('Page valid and shortcode found', 'crelate-job-board'); ?></span>
+                <?php endif; ?>
+            </div>
+        </div>
+        <p class="description"><?php _e('Enter the URL of the page where you have the [crelate_job_board] shortcode. This will be used for the "Back to Jobs" link on single job pages.', 'crelate-job-board'); ?></p>
+        <?php
+    }
+
+    /**
+     * Show job title field
+     */
+    public function show_job_title_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $show_job_title = isset($settings['show_job_title']) ? $settings['show_job_title'] : '1';
+        ?>
+        <label>
+            <input type="checkbox" name="crelate_job_board_settings[show_job_title]" value="1" <?php checked($show_job_title, '1'); ?> />
+            <?php _e('Show job title on single job pages', 'crelate-job-board'); ?>
+        </label>
+        <p class="description"><?php _e('When disabled, the job title will be hidden (useful if your theme already displays it in the page title bar).', 'crelate-job-board'); ?></p>
+        <?php
+    }
+
+    /**
+     * Job title tag field
+     */
+    public function job_title_tag_field() {
+        $settings = get_option('crelate_job_board_settings');
+        $job_title_tag = !empty($settings['job_title_tag']) ? $settings['job_title_tag'] : 'h1';
+        ?>
+        <select name="crelate_job_board_settings[job_title_tag]" id="job_title_tag">
+            <option value="h1" <?php selected($job_title_tag, 'h1'); ?>><?php _e('H1', 'crelate-job-board'); ?></option>
+            <option value="h2" <?php selected($job_title_tag, 'h2'); ?>><?php _e('H2', 'crelate-job-board'); ?></option>
+            <option value="h3" <?php selected($job_title_tag, 'h3'); ?>><?php _e('H3', 'crelate-job-board'); ?></option>
+            <option value="h4" <?php selected($job_title_tag, 'h4'); ?>><?php _e('H4', 'crelate-job-board'); ?></option>
+            <option value="h5" <?php selected($job_title_tag, 'h5'); ?>><?php _e('H5', 'crelate-job-board'); ?></option>
+            <option value="h6" <?php selected($job_title_tag, 'h6'); ?>><?php _e('H6', 'crelate-job-board'); ?></option>
+            <option value="div" <?php selected($job_title_tag, 'div'); ?>><?php _e('DIV', 'crelate-job-board'); ?></option>
+        </select>
+        <p class="description"><?php _e('Choose the HTML tag for the job title on single job pages.', 'crelate-job-board'); ?></p>
+        <?php
+    }
+    
+    /**
+     * Admin notices
+     */
+    public function admin_notices() {
+        if (isset($_GET['page']) && $_GET['page'] === 'crelate-job-board') {
+            $settings = get_option('crelate_job_board_settings');
+            if (empty($settings['api_key'])) {
+                echo '<div class="notice notice-warning is-dismissible"><p>' . __('Please configure your Crelate API settings.', 'crelate-job-board') . '</p></div>';
+            }
+        }
+    }
+    
+    /**
+     * Test connection AJAX handler
+     */
+    public function test_connection() {
+        check_ajax_referer('crelate_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.'));
+        }
+        
+        $api = new Crelate_API();
+        $result = $api->test_connection();
+        
+        // Always send success response with the result data
+        wp_send_json_success($result);
+    }
+    
+    /**
+     * Import jobs AJAX handler
+     */
+    public function import_jobs() {
+        check_ajax_referer('crelate_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.'));
+        }
+        
+        $force_update = isset($_POST['force_update']) ? (bool) $_POST['force_update'] : false;
+        $api = new Crelate_API();
+        $result = $api->import_jobs($force_update);
+        
+        if ($result && isset($result['success'])) {
+            if ($result['success']) {
+                wp_send_json_success($result);
+            } else {
+                wp_send_json_error($result['message'] ?? 'Import failed');
+            }
+        } else {
+            wp_send_json_error(__('Import failed. Please check your API settings.', 'crelate-job-board'));
+        }
+    }
+    
+    /**
+     * Get import stats AJAX handler
+     */
+    public function get_import_stats() {
+        check_ajax_referer('crelate_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.'));
+        }
+        
+        $api = new Crelate_API();
+        $stats = $api->get_import_stats();
+        
+        wp_send_json_success($stats);
+    }
+
+    /**
+     * Get current statistics AJAX handler
+     */
+    public function get_current_stats() {
+        check_ajax_referer('crelate_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.'));
+        }
+        
+        // Get current job statistics
+        $job_counts = wp_count_posts('crelate_job');
+        $stats = array(
+            'total_jobs' => $job_counts->publish + $job_counts->draft + $job_counts->pending + $job_counts->private,
+            'published_jobs' => $job_counts->publish,
+            'draft_jobs' => $job_counts->draft
+        );
+        
+        wp_send_json_success($stats);
+    }
+
+    /**
+     * Validate page URL AJAX handler
+     */
+    public function validate_page_url() {
+        check_ajax_referer('crelate_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.'));
+        }
+        
+        $url = sanitize_url($_POST['url'] ?? '');
+        
+        if (empty($url)) {
+            wp_send_json_error(array('message' => 'URL is required'));
+        }
+        
+        $page_id = url_to_postid($url);
+        $valid = false;
+        $has_shortcode = false;
+        $debug_info = array();
+        
+        if ($page_id) {
+            $page = get_post($page_id);
+            if ($page && $page->post_status === 'publish') {
+                $valid = true;
+                $debug_info['page_id'] = $page_id;
+                $debug_info['page_title'] = $page->post_title;
+                $debug_info['content_length'] = strlen($page->post_content);
+                
+                // Check for multiple shortcode variations
+                $content = $page->post_content;
+                $shortcode_patterns = array(
+                    '[crelate_job_board',
+                    '[crelate_jobs',
+                    '[crelate_job_search',
+                    '[crelate_job_filters',
+                    '[crelate_job_count',
+                    '[crelate_job_list',
+                    '[crelate_job_apply_iframe'
+                );
+                
+                $debug_info['shortcode_patterns'] = $shortcode_patterns;
+                
+                foreach ($shortcode_patterns as $pattern) {
+                    if (strpos($content, $pattern) !== false) {
+                        $has_shortcode = true;
+                        $debug_info['found_pattern'] = $pattern;
+                        break;
+                    }
+                }
+                
+                // Also check for shortcodes in page builders or meta fields
+                if (!$has_shortcode) {
+                    // Check meta fields for shortcodes
+                    $meta_fields = get_post_meta($page_id);
+                    $debug_info['meta_fields_count'] = count($meta_fields);
+                    
+                    foreach ($meta_fields as $meta_key => $meta_values) {
+                        if (is_array($meta_values)) {
+                            foreach ($meta_values as $meta_value) {
+                                foreach ($shortcode_patterns as $pattern) {
+                                    if (strpos($meta_value, $pattern) !== false) {
+                                        $has_shortcode = true;
+                                        $debug_info['found_in_meta'] = $meta_key;
+                                        $debug_info['found_pattern'] = $pattern;
+                                        break 3;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                $debug_info['error'] = 'Page not found or not published';
+            }
+        } else {
+            $debug_info['error'] = 'Invalid page ID';
+        }
+        
+        // For debugging, let's log this information
+        error_log('Crelate Job Board URL Validation Debug: ' . print_r($debug_info, true));
+        
+        wp_send_json_success(array(
+            'valid' => $valid,
+            'has_shortcode' => $has_shortcode,
+            'debug' => $debug_info
+        ));
+    }
+
+    /**
+     * Suggest application fields from API
+     */
+    public function suggest_application_fields() {
+        check_ajax_referer('crelate_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Permission denied', 'crelate-job-board'));
+        }
+        $suggestions = array();
+        // Minimal suggestions: known contact fields often useful
+        $suggestions[] = array('id' => 'applicant_linkedin', 'label' => __('LinkedIn Profile', 'crelate-job-board'), 'type' => 'url', 'required' => false);
+        $suggestions[] = array('id' => 'applicant_website', 'label' => __('Portfolio/Website', 'crelate-job-board'), 'type' => 'url', 'required' => false);
+        $suggestions[] = array('id' => 'applicant_location', 'label' => __('Location', 'crelate-job-board'), 'type' => 'text', 'required' => false);
+        $suggestions[] = array('id' => 'how_heard', 'label' => __('How did you hear about this position?', 'crelate-job-board'), 'type' => 'select', 'required' => false, 'options' => array(
+            array('value' => 'linkedin', 'label' => 'LinkedIn'),
+            array('value' => 'indeed', 'label' => 'Indeed'),
+            array('value' => 'glassdoor', 'label' => 'Glassdoor'),
+            array('value' => 'company_website', 'label' => 'Company Website'),
+            array('value' => 'referral', 'label' => 'Referral'),
+            array('value' => 'other', 'label' => 'Other'),
+        ));
+        wp_send_json_success(array('fields' => $suggestions));
+    }
+    
+    /**
+     * General settings tab
+     */
+    public function general_settings_tab() {
+        ?>
+        <!-- Shortcodes Section -->
+        <div class="crelate-section-header" data-section="shortcodes">
+            <h2 class="crelate-toggle-heading" data-section="shortcodes"><?php _e('Available Shortcodes', 'crelate-job-board'); ?></h2>
+        </div>
+        <div class="crelate-section-content" data-section="shortcodes">
+            <p><?php _e('Use this shortcode to display the job board functionality on your pages:', 'crelate-job-board'); ?></p>
+            
+            <div class="crelate-shortcodes-grid">
+                <div class="crelate-shortcode-item">
+                    <h3><?php _e('Main Job Board', 'crelate-job-board'); ?></h3>
+                    <code>[crelate_job_board]</code>
+                    <p><?php _e('Displays the complete job board with search, filters, and job listings.', 'crelate-job-board'); ?></p>
+                    <h4><?php _e('Parameters:', 'crelate-job-board'); ?></h4>
+                    <ul>
+                        <li><code>template="grid"</code> - <?php _e('Display as grid (default)', 'crelate-job-board'); ?></li>
+                        <li><code>template="list"</code> - <?php _e('Display as list', 'crelate-job-board'); ?></li>
+                        <li><code>posts_per_page="12"</code> - <?php _e('Number of jobs per page', 'crelate-job-board'); ?></li>
+                        <li><code>show_filters="true"</code> - <?php _e('Show filter options', 'crelate-job-board'); ?></li>
+                        <li><code>show_search="true"</code> - <?php _e('Show search box', 'crelate-job-board'); ?></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="crelate-shortcodes-note">
+                <h4><?php _e('Usage Tips:', 'crelate-job-board'); ?></h4>
+                <ul>
+                    <li><?php _e('Copy and paste the shortcode into your page content or use it in page builders.', 'crelate-job-board'); ?></li>
+                    <li><?php _e('The main job board shortcode <code>[crelate_job_board]</code> is typically used on your main jobs page.', 'crelate-job-board'); ?></li>
+                    <li><?php _e('Parameters are optional - the shortcode works with default settings.', 'crelate-job-board'); ?></li>
+                </ul>
+            </div>
+        </div>
+        
+        <form method="post" action="options.php">
+            <?php
+            settings_fields('crelate_job_board_settings');
+            $this->render_toggleable_settings_sections();
+            ?>
+        </form>
+        <?php
+    }
+    
+    /**
+     * Render toggleable settings sections
+     */
+    public function render_toggleable_settings_sections() {
+        global $wp_settings_sections, $wp_settings_fields;
+        
+        if (!isset($wp_settings_sections['crelate_job_board_settings'])) {
+            return;
+        }
+        
+        foreach ((array) $wp_settings_sections['crelate_job_board_settings'] as $section) {
+            $section_id = $section['id'];
+            $section_title = $section['title'];
+            
+            echo '<div class="crelate-section-header" data-section="' . esc_attr($section_id) . '">';
+            echo '<h2 class="crelate-toggle-heading" data-section="' . esc_attr($section_id) . '">' . esc_html($section_title) . '</h2>';
+            echo '</div>';
+            
+            echo '<div class="crelate-section-content" data-section="' . esc_attr($section_id) . '">';
+            
+            // Call section callback if it exists
+            if ($section['callback']) {
+                call_user_func($section['callback'], $section);
+            }
+            
+            // Render all fields in this section
+            if (isset($wp_settings_fields) && isset($wp_settings_fields['crelate_job_board_settings']) && isset($wp_settings_fields['crelate_job_board_settings'][$section_id])) {
+                echo '<table class="form-table" role="presentation">';
+                do_settings_fields('crelate_job_board_settings', $section_id);
+                echo '</table>';
+            }
+            
+            // Add save button for each section
+            echo '<div class="crelate-section-save">';
+            echo '<button type="submit" class="button button-primary">' . __('Save Settings', 'crelate-job-board') . '</button>';
+            echo '</div>';
+            
+            echo '</div>';
+        }
+    }
+
+    
+    /**
+     * Styling tab
+     */
+    public function styling_tab() {
+        $settings = get_option('crelate_job_board_styling', array());
+        ?>
+        <div class="crelate-section-header" data-section="styling">
+            <h2 class="crelate-toggle-heading" data-section="styling"><?php _e('Job Board Styling', 'crelate-job-board'); ?></h2>
+        </div>
+        <div class="crelate-section-content" data-section="styling">
+            <form method="post" action="options.php">
+                <?php settings_fields('crelate_job_board_styling'); ?>
+                
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">
+                            <label for="primary_color"><?php _e('Primary Color', 'crelate-job-board'); ?></label>
+                        </th>
+                        <td>
+                            <input type="color" name="crelate_job_board_styling[primary_color]" value="<?php echo esc_attr($settings['primary_color'] ?? '#0073aa'); ?>" class="color-picker">
+                            <input type="text" name="crelate_job_board_styling[primary_color_hex]" value="<?php echo esc_attr($settings['primary_color'] ?? '#0073aa'); ?>" class="hex-input" placeholder="#0073aa">
+                            <p class="description"><?php _e('Enter a custom hex color code for your primary color (e.g., #0073aa).', 'crelate-job-board'); ?></p>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">
+                            <label for="modal_background_color"><?php _e('Modal Background Color', 'crelate-job-board'); ?></label>
+                        </th>
+                        <td>
+                            <input type="color" name="crelate_job_board_styling[modal_background_color]" value="<?php echo esc_attr($settings['modal_background_color'] ?? '#EBF7FC'); ?>" class="color-picker">
+                            <input type="text" name="crelate_job_board_styling[modal_background_color_hex]" value="<?php echo esc_attr($settings['modal_background_color'] ?? '#EBF7FC'); ?>" class="hex-input" placeholder="#EBF7FC">
+                            <p class="description"><?php _e('Background color for the application form modal. Should match your Crelate form background color.', 'crelate-job-board'); ?></p>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">
+                            <label for="border_radius"><?php _e('Border Radius', 'crelate-job-board'); ?></label>
+                        </th>
+                        <td>
+                            <select name="crelate_job_board_styling[border_radius]" id="border_radius">
+                                <option value="rounded" <?php selected($settings['border_radius'] ?? 'rounded', 'rounded'); ?>>
+                                    <?php _e('Rounded', 'crelate-job-board'); ?>
+                                </option>
+                                <option value="square" <?php selected($settings['border_radius'] ?? 'rounded', 'square'); ?>>
+                                    <?php _e('Square', 'crelate-job-board'); ?>
+                                </option>
+                            </select>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">
+                            <label for="view_details_button_text"><?php _e('View Details Button Text', 'crelate-job-board'); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" name="crelate_job_board_styling[view_details_button_text]" value="<?php echo esc_attr($settings['view_details_button_text'] ?? 'View Details'); ?>" class="regular-text">
+                            <p class="description"><?php _e('Text to display on the "View Details" buttons on job cards.', 'crelate-job-board'); ?></p>
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <th scope="row">
+                            <label for="apply_now_button_text"><?php _e('Apply Now Button Text', 'crelate-job-board'); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" name="crelate_job_board_styling[apply_now_button_text]" value="<?php echo esc_attr($settings['apply_now_button_text'] ?? 'Apply Now'); ?>" class="regular-text">
+                            <p class="description"><?php _e('Text to display on the "Apply Now" buttons on single job pages.', 'crelate-job-board'); ?></p>
+                        </td>
+                    </tr>
+                </table>
+                
+                <?php submit_button(); ?>
+            </form>
+        </div>
+        <?php
+    }
+
+    /**
+     * Admin page HTML
+     */
+    public function admin_page_html() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        
+        $settings = get_option('crelate_job_board_settings');
+        $enable_onboarding = isset($settings['enable_onboarding']) ? $settings['enable_onboarding'] : '1';
+        
+        // Set default tab based on onboarding setting (only affects default, not access)
+        $default_tab = $enable_onboarding === '1' ? 'onboarding' : 'general';
+        $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : $default_tab;
+        ?>
+        <div class="wrap">
+            <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+            
+            <nav class="nav-tab-wrapper">
+                <a href="?page=crelate-job-board&tab=onboarding" class="nav-tab <?php echo $active_tab === 'onboarding' ? 'nav-tab-active' : ''; ?>">
+                    <?php _e('Onboarding', 'crelate-job-board'); ?>
+                </a>
+                <a href="?page=crelate-job-board&tab=general" class="nav-tab <?php echo $active_tab === 'general' ? 'nav-tab-active' : ''; ?>">
+                    <?php _e('General Settings', 'crelate-job-board'); ?>
+                </a>
+                <a href="?page=crelate-job-board&tab=styling" class="nav-tab <?php echo $active_tab === 'styling' ? 'nav-tab-active' : ''; ?>">
+                    <?php _e('Styling', 'crelate-job-board'); ?>
+                </a>
+                <a href="?page=crelate-job-board&tab=testing" class="nav-tab <?php echo $active_tab === 'testing' ? 'nav-tab-active' : ''; ?>">
+                    <?php _e('Testing', 'crelate-job-board'); ?>
+                </a>
+            </nav>
+            
+            <div class="tab-content">
+                <?php
+                switch ($active_tab) {
+                    case 'onboarding':
+                        $this->onboarding_tab();
+                        break;
+                    case 'general':
+                        $this->general_settings_tab();
+                        break;
+                    case 'styling':
+                        $this->styling_tab();
+                        break;
+                    case 'testing':
+                        $this->testing_tab();
+                        break;
+                    default:
+                        $this->general_settings_tab();
+                        break;
+                }
+                ?>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Onboarding tab: enter API key, test connection, and show stats
+     */
+    public function onboarding_tab() {
+        $settings = get_option('crelate_job_board_settings');
+        $api = new Crelate_API();
+        $stats = $api->get_import_stats();
+        ?>
+        <div class="crelate-onboarding">
+            <!-- Welcome Hero Section -->
+            <div class="onboarding-hero">
+                <div class="hero-content">
+                    <div class="hero-logo">
+                        <div class="logo-icon">
+                            <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <rect width="48" height="48" rx="8" fill="#149263"/>
+                                <path d="M12 16h24v2H12v-2zm0 6h24v2H12v-2zm0 6h16v2H12v-2z" fill="white"/>
+                            </svg>
+                        </div>
+                        <h2><?php _e('A Job Board 4 Crelate', 'crelate-job-board'); ?></h2>
+                    </div>
+                    <p class="hero-subtitle"><?php _e('Enter your API settings and click Save. We\'ll validate and import automatically. If nothing happens, click Test Connection.', 'crelate-job-board'); ?></p>
+                </div>
+            </div>
+
+            <!-- API Configuration Form -->
+            <div class="onboarding-form-section">
+                <form method="post" action="options.php" class="api-config-form">
+                    <?php settings_fields('crelate_job_board_settings'); ?>
+                    
+                    <div class="form-group">
+                        <label for="api_key"><?php _e('API Key', 'crelate-job-board'); ?></label>
+                        <input type="text" id="api_key" name="crelate_job_board_settings[api_key]" value="<?php echo esc_attr($this->get_api_key_display_value()); ?>" class="regular-text" />
+                        <p class="field-description"><?php _e('Enter your Crelate API key. The input field shows only the first 4 characters when a key is saved.', 'crelate-job-board'); ?></p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="api_endpoint"><?php _e('API Endpoint', 'crelate-job-board'); ?></label>
+                        <input type="url" id="api_endpoint" name="crelate_job_board_settings[api_endpoint]" value="<?php echo esc_attr($this->get_api_endpoint_value()); ?>" class="regular-text" />
+                        <p class="field-description"><?php _e('Enter the Crelate API endpoint URL.', 'crelate-job-board'); ?></p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="portal_id"><?php _e('Portal ID', 'crelate-job-board'); ?></label>
+                        <input type="text" id="portal_id" name="crelate_job_board_settings[portal_id]" value="<?php echo esc_attr($this->get_portal_id_value()); ?>" class="regular-text" />
+                        <p class="field-description"><?php _e('Enter your Crelate portal/company slug used in job URLs.', 'crelate-job-board'); ?></p>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="button button-primary save-settings-btn"><?php _e('Save Settings', 'crelate-job-board'); ?></button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Action Buttons Section -->
+            <div class="onboarding-actions">
+                <div class="action-buttons">
+                    <button type="button" id="crelate-test-connection" class="button button-secondary"><?php _e('Test Connection', 'crelate-job-board'); ?></button>
+                    <button type="button" id="crelate-import-jobs" class="button button-primary"><?php _e('Import Jobs', 'crelate-job-board'); ?></button>
+                    <a href="?page=crelate-statistics" class="button button-secondary"><?php _e('View Statistics', 'crelate-job-board'); ?></a>
+                    <a href="?page=crelate-job-board&tab=general" class="button button-secondary"><?php _e('Next Step: General Settings', 'crelate-job-board'); ?></a>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div id="connection-result" class="result-section"></div>
+            <div id="import-result" class="result-section"></div>
+            
+            <!-- Statistics Section -->
+            <div class="onboarding-stats">
+                <h3><?php _e('Current Statistics', 'crelate-job-board'); ?></h3>
+                <div id="current-stats" class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-label"><?php _e('Total Jobs:', 'crelate-job-board'); ?></span>
+                        <span class="stat-value"><?php echo esc_html($stats['total_jobs']); ?></span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label"><?php _e('Published Jobs:', 'crelate-job-board'); ?></span>
+                        <span class="stat-value"><?php echo esc_html($stats['published_jobs']); ?></span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label"><?php _e('Draft Jobs:', 'crelate-job-board'); ?></span>
+                        <span class="stat-value"><?php echo esc_html($stats['draft_jobs']); ?></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Auto-Import Status Section -->
+            <div class="onboarding-cron-status">
+                <h3><?php _e('Auto-Import Status', 'crelate-job-board'); ?></h3>
+                <?php $this->display_cron_status(); ?>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Get API key display value (masked)
+     */
+    private function get_api_key_display_value() {
+        $settings = get_option('crelate_job_board_settings');
+        $api_key = !empty($settings['api_key']) ? $settings['api_key'] : '';
+        if (!empty($api_key)) {
+            $first = substr($api_key, 0, 4);
+            return $first . str_repeat('*', max(0, strlen($api_key) - 4));
+        }
+        return '';
+    }
+
+    /**
+     * Get API endpoint value
+     */
+    private function get_api_endpoint_value() {
+        $settings = get_option('crelate_job_board_settings');
+        return !empty($settings['api_endpoint']) ? $settings['api_endpoint'] : 'https://app.crelate.com/api';
+    }
+
+    /**
+     * Get Portal ID value
+     */
+    private function get_portal_id_value() {
+        $settings = get_option('crelate_job_board_settings');
+        return !empty($settings['portal_id']) ? $settings['portal_id'] : '';
+    }
+    
+    /**
+     * Display cron job status
+     */
+    private function display_cron_status() {
+        $settings = get_option('crelate_job_board_settings');
+        $auto_import = !empty($settings['auto_import']) ? $settings['auto_import'] : '0';
+        $next_scheduled = wp_next_scheduled('crelate_job_board_import_cron');
+        $last_import = !empty($settings['last_import']) ? $settings['last_import'] : array();
+        
+        ?>
+        <div class="cron-status-grid">
+            <div class="status-item">
+                <span class="status-label"><?php _e('Auto-Import:', 'crelate-job-board'); ?></span>
+                <span class="status-value">
+                    <?php if ($auto_import === '1'): ?>
+                        <span style="color: green;">✓ <?php _e('Enabled', 'crelate-job-board'); ?></span>
+                    <?php else: ?>
+                        <span style="color: red;">✗ <?php _e('Disabled', 'crelate-job-board'); ?></span>
+                    <?php endif; ?>
+                </span>
+            </div>
+            
+            <div class="status-item">
+                <span class="status-label"><?php _e('Next Scheduled Run:', 'crelate-job-board'); ?></span>
+                <span class="status-value">
+                    <?php if ($next_scheduled): ?>
+                        <?php echo date('Y-m-d H:i:s', $next_scheduled); ?>
+                    <?php else: ?>
+                        <span style="color: orange;"><?php _e('Not scheduled', 'crelate-job-board'); ?></span>
+                    <?php endif; ?>
+                </span>
+            </div>
+            
+            <div class="status-item">
+                <span class="status-label"><?php _e('Import Frequency:', 'crelate-job-board'); ?></span>
+                <span class="status-value">
+                    <?php 
+                    $frequency = !empty($settings['import_frequency']) ? $settings['import_frequency'] : 'daily';
+                    echo ucfirst($frequency);
+                    ?>
+                </span>
+            </div>
+            
+            <?php if (!empty($last_import) && is_array($last_import)): ?>
+            <div class="status-item">
+                <span class="status-label"><?php _e('Last Import:', 'crelate-job-board'); ?></span>
+                <span class="status-value">
+                    <?php 
+                    if (!empty($last_import['timestamp'])) {
+                        echo date('Y-m-d H:i:s', strtotime($last_import['timestamp']));
+                    } else {
+                        _e('Never', 'crelate-job-board');
+                    }
+                    ?>
+                </span>
+            </div>
+            
+            <div class="status-item">
+                <span class="status-label"><?php _e('Last Import Results:', 'crelate-job-board'); ?></span>
+                <span class="status-value">
+                    <?php 
+                    if (!empty($last_import['imported']) || !empty($last_import['updated'])) {
+                        printf(__('%d new, %d updated, %d errors', 'crelate-job-board'), 
+                            intval($last_import['imported'] ?? 0), 
+                            intval($last_import['updated'] ?? 0), 
+                            intval($last_import['errors'] ?? 0)
+                        );
+                    } else {
+                        _e('No data', 'crelate-job-board');
+                    }
+                    ?>
+                </span>
+            </div>
+            <?php endif; ?>
+        </div>
+        
+        <?php if ($auto_import === '0'): ?>
+        <div class="cron-notice">
+            <p><strong><?php _e('Auto-import is disabled.', 'crelate-job-board'); ?></strong> 
+            <?php _e('To enable automatic job imports, go to General Settings and check "Enable automatic job import".', 'crelate-job-board'); ?></p>
+        </div>
+        <?php elseif ($auto_import === '1' && !$next_scheduled): ?>
+        <div class="cron-notice">
+            <p><strong><?php _e('Auto-import is enabled but not scheduled.', 'crelate-job-board'); ?></strong> 
+            <?php _e('Save your settings to activate the scheduled import.', 'crelate-job-board'); ?></p>
+        </div>
+        <?php endif; ?>
+        <?php
+    }
+
+    /**
+     * Render job views table (simple view counter)
+     */
+    private function render_job_views_table() {
+        $views = get_option('crelate_job_views', array());
+        if (empty($views)) {
+            echo '<p><em>' . esc_html__('No views tracked yet.', 'crelate-job-board') . '</em></p>';
+            return;
+        }
+        echo '<table class="widefat striped"><thead><tr><th>' . esc_html__('Job', 'crelate-job-board') . '</th><th>' . esc_html__('URL', 'crelate-job-board') . '</th><th>' . esc_html__('Views', 'crelate-job-board') . '</th></tr></thead><tbody>';
+        foreach ($views as $post_id => $count) {
+            $permalink = get_permalink($post_id);
+            echo '<tr>';
+            echo '<td>' . esc_html(get_the_title($post_id)) . '</td>';
+            echo '<td><a href="' . esc_url($permalink) . '" target="_blank">' . esc_html($permalink) . '</a></td>';
+            echo '<td>' . intval($count) . '</td>';
+            echo '</tr>';
+        }
+        echo '</tbody></table>';
+    }
+    
+    /**
+     * Test page
+     */
+    public function test_page() {
+        include CRELATE_JOB_BOARD_PLUGIN_DIR . 'test-page.php';
+    }
+    
+    /**
+     * Testing tab
+     */
+    public function testing_tab() {
+        include CRELATE_JOB_BOARD_PLUGIN_DIR . 'test-live-deployment.php';
+    }
+    
+    /**
+     * Get last lock user information
+     */
+    private function get_last_lock_user() {
+        $security_log = get_option('crelate_security_log', array());
+        foreach (array_reverse($security_log) as $entry) {
+            if (strpos($entry['message'], 'locked') !== false) {
+                return $entry['data']['user_login'] ?? 'Unknown';
+            }
+        }
+        return 'Unknown';
+    }
+    
+    /**
+     * Get API key display value (masked)
+     */
+    private function get_api_key_display_value() {
+        $settings = get_option('crelate_job_board_settings');
+        $api_key = !empty($settings['api_key']) ? $settings['api_key'] : '';
+        
+        if (!empty($api_key)) {
+            $first = substr($api_key, 0, 4);
+            return $first . str_repeat('*', max(0, strlen($api_key) - 4));
+        }
+        
+        return '';
+    }
+    
+    /**
+     * Get API endpoint value
+     */
+    private function get_api_endpoint_value() {
+        $settings = get_option('crelate_job_board_settings');
+        return !empty($settings['api_endpoint']) ? $settings['api_endpoint'] : 'https://app.crelate.com/api/pub/v1';
+    }
+    
+    /**
+     * Add security tab to admin menu
+     */
+    public function add_security_tab() {
+        if ($this->is_authorized_user()) {
+            add_submenu_page(
+                'crelate-job-board',
+                __('Security Log', 'crelate-job-board'),
+                __('Security Log', 'crelate-job-board'),
+                'manage_options',
+                'crelate-security-log',
+                array($this, 'security_log_page')
+            );
+        }
+    }
+    
+    /**
+     * Security log page
+     */
+    public function security_log_page() {
+        if (!$this->is_authorized_user()) {
+            wp_die('Access denied');
+        }
+        
+        $security_log = get_option('crelate_security_log', array());
+        ?>
+        <div class="wrap">
+            <h1><?php _e('Crelate API Security Log', 'crelate-job-board'); ?></h1>
+            
+            <div class="security-controls">
+                <button type="button" class="button button-primary" id="clear-security-log">
+                    <?php _e('Clear Security Log', 'crelate-job-board'); ?>
+                </button>
+                <button type="button" class="button button-secondary" id="export-security-log">
+                    <?php _e('Export Log', 'crelate-job-board'); ?>
+                </button>
+            </div>
+            
+            <div class="security-log">
+                <h3><?php _e('Recent Security Events', 'crelate-job-board'); ?></h3>
+                <?php if (empty($security_log)): ?>
+                    <p><em><?php _e('No security events logged.', 'crelate-job-board'); ?></em></p>
+                <?php else: ?>
+                    <?php foreach (array_reverse($security_log) as $entry): ?>
+                        <div class="security-log-entry">
+                            <strong><?php echo esc_html($entry['timestamp']); ?></strong><br>
+                            <?php echo esc_html($entry['message']); ?><br>
+                            <?php if (!empty($entry['data'])): ?>
+                                <small>
+                                    User: <?php echo esc_html($entry['data']['user_login'] ?? 'Unknown'); ?> | 
+                                    IP: <?php echo esc_html($entry['data']['ip'] ?? 'Unknown'); ?>
+                                </small>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php
+    }
+}

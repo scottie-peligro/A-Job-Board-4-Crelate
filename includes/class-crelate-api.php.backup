@@ -1,0 +1,297 @@
+<?php
+/**
+ * Crelate API Integration
+ * 
+ * Handles job import and API operations using the clean Crelate Client.
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class Crelate_API {
+    
+    /**
+     * Crelate Client instance
+     */
+    private $client;
+    
+    /**
+     * Constructor
+     */
+    public function __construct() {
+        $this->client = new Crelate_Client();
+    }
+    
+    /**
+     * Test API connection
+     */
+    public function test_connection() {
+        return $this->client->test_connection();
+    }
+    
+    /**
+     * Import jobs from Crelate
+     */
+    public function import_jobs($limit = 50) {
+        try {
+            $response = $this->client->get_job_postings($limit);
+            
+            if ($response['status'] !== 200) {
+                return array(
+                    'success' => false,
+                    'message' => 'Failed to fetch jobs: HTTP ' . $response['status']
+                );
+            }
+            
+            $jobs_data = $response['data'];
+            
+            // Debug: Log the response structure
+            error_log('Crelate API Response Structure: ' . print_r($jobs_data, true));
+            
+            // Handle different possible response structures
+            $jobs = array();
+            
+            // If response is not an array, try to parse it
+            if (!is_array($jobs_data)) {
+                // Try to decode as JSON if it's a string
+                if (is_string($jobs_data)) {
+                    $decoded = json_decode($jobs_data, true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                        $jobs_data = $decoded;
+                    } else {
+                        return array(
+                            'success' => false,
+                            'message' => 'Invalid response format: ' . substr($jobs_data, 0, 100)
+                        );
+                    }
+                } else {
+                    return array(
+                        'success' => false,
+                        'message' => 'Response is not an array or string: ' . gettype($jobs_data)
+                    );
+                }
+            }
+            
+            // Now handle the array response
+            if (isset($jobs_data['data']) && is_array($jobs_data['data'])) {
+                $jobs = $jobs_data['data'];
+            } elseif (isset($jobs_data['Results']) && is_array($jobs_data['Results'])) {
+                $jobs = $jobs_data['Results'];
+            } elseif (isset($jobs_data['items']) && is_array($jobs_data['items'])) {
+                $jobs = $jobs_data['items'];
+            } elseif (isset($jobs_data['jobs']) && is_array($jobs_data['jobs'])) {
+                $jobs = $jobs_data['jobs'];
+            } elseif (is_array($jobs_data)) {
+                // If the response is directly an array of jobs
+                $jobs = $jobs_data;
+            }
+            
+            if (empty($jobs)) {
+                return array(
+                    'success' => false,
+                    'message' => 'No jobs found in response. Response structure: ' . json_encode(array_keys($jobs_data))
+                );
+            }
+            
+            $imported = 0;
+            $updated = 0;
+            $errors = array();
+            
+            foreach ($jobs as $job_data) {
+                $result = $this->import_single_job($job_data);
+                
+                if ($result['success']) {
+                    if ($result['action'] === 'created') {
+                        $imported++;
+                    } else {
+                        $updated++;
+                    }
+                } else {
+                    $errors[] = $result['message'];
+                }
+            }
+            
+            return array(
+                'success' => true,
+                'imported' => $imported,
+                'updated' => $updated,
+                'errors' => $errors,
+                'total' => count($jobs)
+            );
+            
+        } catch (Exception $e) {
+            return array(
+                'success' => false,
+                'message' => 'Import failed: ' . $e->getMessage()
+            );
+        }
+    }
+    
+    /**
+     * Import a single job
+     */
+    private function import_single_job($job_data) {
+        try {
+            // Handle different possible field names for job ID
+            $job_id = $job_data['id'] ?? $job_data['Id'] ?? $job_data['jobId'] ?? '';
+            
+            // Handle different possible field names for title
+            $title = $job_data['name'] ?? $job_data['title'] ?? $job_data['Title'] ?? $job_data['jobTitle'] ?? 'Untitled Job';
+            
+            // Handle different possible field names for description
+            $description = $job_data['description'] ?? $job_data['Description'] ?? $job_data['jobDescription'] ?? '';
+            
+            // Handle different possible field names for location
+            $location = '';
+            if (isset($job_data['location'])) {
+                if (is_array($job_data['location'])) {
+                    $location = $job_data['location']['city'] ?? $job_data['location']['state'] ?? '';
+                } else {
+                    $location = $job_data['location'];
+                }
+            } elseif (isset($job_data['Location'])) {
+                $location = $job_data['Location'];
+            } elseif (isset($job_data['city']) && isset($job_data['state'])) {
+                $location = $job_data['city'] . ', ' . $job_data['state'];
+            }
+            
+            // Handle different possible field names for company
+            $company = '';
+            if (isset($job_data['company'])) {
+                if (is_array($job_data['company'])) {
+                    $company = $job_data['company']['name'] ?? '';
+                } else {
+                    $company = $job_data['company'];
+                }
+            } elseif (isset($job_data['Company'])) {
+                $company = $job_data['Company'];
+            }
+            
+            if (empty($job_id)) {
+                return array(
+                    'success' => false,
+                    'message' => 'Job ID not found in job data'
+                );
+            }
+            
+            // Check if job already exists
+            $existing_job = get_posts(array(
+                'post_type' => 'crelate_job',
+                'meta_query' => array(
+                    array(
+                        'key' => '_crelate_job_id',
+                        'value' => $job_id,
+                        'compare' => '='
+                    )
+                ),
+                'post_status' => 'any',
+                'posts_per_page' => 1
+            ));
+            
+            // Check if post type is registered
+            if (!post_type_exists('crelate_job')) {
+                return array(
+                    'success' => false,
+                    'message' => 'Crelate job post type not registered'
+                );
+            }
+            
+            $job_post_data = array(
+                'post_title' => $title,
+                'post_content' => $description,
+                'post_status' => 'publish',
+                'post_type' => 'crelate_job'
+            );
+            
+            if (!empty($existing_job)) {
+                // Update existing job
+                $job_post_data['ID'] = $existing_job[0]->ID;
+                $post_id = wp_update_post($job_post_data);
+                $action = 'updated';
+            } else {
+                // Create new job
+                $post_id = wp_insert_post($job_post_data);
+                $action = 'created';
+            }
+            
+            if (is_wp_error($post_id)) {
+                return array(
+                    'success' => false,
+                    'message' => 'Failed to save job: ' . $post_id->get_error_message()
+                );
+            }
+            
+            // Save job meta data
+            update_post_meta($post_id, '_crelate_job_id', $job_id);
+            update_post_meta($post_id, '_job_location', $location);
+            update_post_meta($post_id, '_job_company', $company);
+            
+            // Save additional job data
+            if (!empty($job_data['salary'])) {
+                update_post_meta($post_id, '_job_salary', $job_data['salary']);
+            }
+            
+            if (!empty($job_data['employmentType'])) {
+                update_post_meta($post_id, '_job_type', $job_data['employmentType']);
+            }
+            
+            return array(
+                'success' => true,
+                'action' => $action,
+                'post_id' => $post_id
+            );
+            
+        } catch (Exception $e) {
+            return array(
+                'success' => false,
+                'message' => 'Failed to import job: ' . $e->getMessage()
+            );
+        }
+    }
+    
+    /**
+     * Submit job application
+     */
+    public function submit_job_application($job_id, $application_data) {
+        try {
+            $response = $this->client->submit_application($job_id, $application_data);
+            
+            if ($response['status'] >= 200 && $response['status'] < 300) {
+                return array(
+                    'success' => true,
+                    'message' => 'Application submitted successfully'
+                );
+            } else {
+                return array(
+                    'success' => false,
+                    'message' => 'Application submission failed: HTTP ' . $response['status']
+                );
+            }
+            
+        } catch (Exception $e) {
+            return array(
+                'success' => false,
+                'message' => 'Application submission failed: ' . $e->getMessage()
+            );
+        }
+    }
+    
+    /**
+     * Get import statistics
+     */
+    public function get_import_stats() {
+        $total_jobs = wp_count_posts('crelate_job');
+        $published_jobs = $total_jobs->publish;
+        $draft_jobs = $total_jobs->draft;
+        
+        $last_import = get_option('crelate_job_board_import_log');
+        
+        return array(
+            'total_jobs' => intval($published_jobs + $draft_jobs),
+            'published_jobs' => intval($published_jobs),
+            'draft_jobs' => intval($draft_jobs),
+            'last_import' => $last_import
+        );
+    }
+}
